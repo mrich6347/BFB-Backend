@@ -1,0 +1,6 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+- Any time you are running terminal commands make sure beforehand you says nvm use 23 so we are using the right node version.
