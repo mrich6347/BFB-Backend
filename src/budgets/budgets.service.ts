@@ -15,7 +15,6 @@ export class BudgetsService {
 
 
   async create(createBudgetDto: CreateBudgetDto, userId: string, authToken: string): Promise<Budget> {
-
     const supabase = this.supabaseService.getAuthenticatedClient(authToken);
     
     let payload = {
@@ -37,8 +36,21 @@ export class BudgetsService {
     return data;
   }
 
-  findAll() {
-    return `This action returns all budgets`;
+  async findAll(userId: string, authToken: string): Promise<Budget[]> {
+    const supabase = this.supabaseService.getAuthenticatedClient(authToken);
+    
+    const { data, error } = await supabase
+      .from('budgets')
+      .select('*')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.log("ERROR", error);
+      throw new Error(error.message);
+    }
+
+    return data;
   }
 
   findOne(id: number) {

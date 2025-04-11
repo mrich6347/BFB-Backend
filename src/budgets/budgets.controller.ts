@@ -20,8 +20,12 @@ export class BudgetsController {
   }
 
   @Get()
-  findAll() {
-    return this.budgetsService.findAll();
+  async findAll(@Req() req: any): Promise<Budget[]> {
+    const authToken = req.headers.authorization?.split(' ')[1];
+    if (!authToken) {
+      throw new UnauthorizedException('No authorization token provided');
+    }
+    return this.budgetsService.findAll(req.user.id, authToken);
   }
 
   @Get(':id')
