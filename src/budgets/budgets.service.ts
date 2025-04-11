@@ -1,0 +1,55 @@
+import { Injectable, UnauthorizedException } from '@nestjs/common';
+import { SupabaseClient } from '@supabase/supabase-js';
+import { CreateBudgetDto } from './dto/create-budget.dto';
+import { UpdateBudgetDto } from './dto/update-budget.dto';
+import { Budget } from './entities/budget.entity';
+import { SupabaseService } from '../supabase/supabase.service';
+
+@Injectable()
+export class BudgetsService {
+  private supabase: SupabaseClient;
+
+  constructor(private supabaseService: SupabaseService) {
+    this.supabase = this.supabaseService.client;
+  }
+
+
+  async create(createBudgetDto: CreateBudgetDto, userId: string, authToken: string): Promise<Budget> {
+
+    const supabase = this.supabaseService.getAuthenticatedClient(authToken);
+    
+    let payload = {
+      ...createBudgetDto,
+      user_id: userId,
+    }
+    
+    const { data, error } = await supabase
+      .from('budgets')
+      .insert([payload])
+      .select()
+      .single();
+
+    if (error) {
+      console.log("ERROR", error)
+      throw new Error(error.message);
+    }
+
+    return data;
+  }
+
+  findAll() {
+    return `This action returns all budgets`;
+  }
+
+  findOne(id: number) {
+    return `This action returns a #${id} budget`;
+  }
+
+  update(id: number, updateBudgetDto: UpdateBudgetDto) {
+    return `This action updates a #${id} budget`;
+  }
+
+  remove(id: number) {
+    return `This action removes a #${id} budget`;
+  }
+}

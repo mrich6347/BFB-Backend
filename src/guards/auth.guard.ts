@@ -27,7 +27,6 @@ export class SupabaseAuthGuard implements CanActivate {
   async validateRequest(request: any): Promise<boolean> {
     // Extract JWT token from Authorization header
     const authHeader = request.headers.authorization;
-    console.log('authHeader', authHeader);
     if (!authHeader) {
       throw new UnauthorizedException('No authorization token provided');
     }
