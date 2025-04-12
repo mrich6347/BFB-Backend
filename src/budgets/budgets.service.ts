@@ -49,7 +49,6 @@ export class BudgetsService {
       console.log("ERROR", error);
       throw new Error(error.message);
     }
-
     return data;
   }
 
