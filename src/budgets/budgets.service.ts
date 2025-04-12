@@ -52,8 +52,20 @@ export class BudgetsService {
     return data;
   }
 
-  findOne(id: number) {
-    return `This action returns a #${id} budget`;
+  async findOne(id: string, authToken: string) {
+   const supabase = this.supabaseService.getAuthenticatedClient(authToken);
+
+   const { data, error } = await supabase
+      .from('budgets')
+      .select('*')
+      .eq('id', id)
+      .single();  
+
+    if (error) {
+      console.log("ERROR", error);
+      throw new Error(error.message);
+    }
+    return data;
   }
 
   update(id: number, updateBudgetDto: UpdateBudgetDto) {

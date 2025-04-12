@@ -5,13 +5,15 @@ import { AppService } from "./app.service";
 import { AuthModule } from "./configurations/auth/auth.module";
 import { BudgetsModule } from './budgets/budgets.module';
 import { SupabaseModule } from './supabase/supabase.module';
+import { MainDataModule } from './main-data/main-data.module';
 
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
     AuthModule,
     BudgetsModule,
-    SupabaseModule
+    SupabaseModule,
+    MainDataModule
   ],
   controllers: [AppController],
   providers: [AppService],

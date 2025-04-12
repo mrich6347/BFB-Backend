@@ -4,33 +4,30 @@ import { CreateBudgetDto } from './dto/create-budget.dto';
 import { UpdateBudgetDto } from './dto/update-budget.dto';
 import { SupabaseAuthGuard } from '../guards/auth.guard';
 import { Budget } from './entities/budget.entity';
+import { AuthService } from '../configurations/auth/auth.service';
+
 
 @Controller('budgets')
 @UseGuards(SupabaseAuthGuard)
 export class BudgetsController {
-  constructor(private readonly budgetsService: BudgetsService) {}
+  constructor(private readonly budgetsService: BudgetsService, private readonly authService: AuthService) {}
 
   @Post()
   async create(@Body() createBudgetDto: CreateBudgetDto, @Req() req: any): Promise<Budget> {
-    const authToken = req.headers.authorization?.split(' ')[1];
-    if (!authToken) {
-      throw new UnauthorizedException('No authorization token provided');
-    }
+    const authToken = this.authService.getAuthToken(req);
     return this.budgetsService.create(createBudgetDto, req.user.id, authToken);
   }
 
   @Get()
   async findAll(@Req() req: any): Promise<Budget[]> {
-    const authToken = req.headers.authorization?.split(' ')[1];
-    if (!authToken) {
-      throw new UnauthorizedException('No authorization token provided');
-    }
+    const authToken = this.authService.getAuthToken(req);
     return this.budgetsService.findAll(req.user.id, authToken);
   }
 
   @Get(':id')
-  findOne(@Param('id') id: string) {
-    return this.budgetsService.findOne(+id);
+  async findOne(@Param('id') id: string, @Req() req: any) {
+    const authToken = this.authService.getAuthToken(req);
+    return this.budgetsService.findOne(id, authToken);
   }
 
   @Patch(':id')
@@ -42,4 +39,5 @@ export class BudgetsController {
   remove(@Param('id') id: string) {
     return this.budgetsService.remove(+id);
   }
+
 }
