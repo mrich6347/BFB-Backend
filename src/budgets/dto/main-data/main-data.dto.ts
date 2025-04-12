@@ -1,5 +1,5 @@
 import { Budget } from "../../entities/budget.entity";
 
-export class MainDataDto {
+export class MainDataResponse {
     budget: Budget
 }
