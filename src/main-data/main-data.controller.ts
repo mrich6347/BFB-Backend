@@ -1,7 +1,7 @@
 import { Controller, Get, Param, Req } from '@nestjs/common';
 import { MainDataService } from './main-data.service';
 import { AuthService } from '../configurations/auth/auth.service';
-import { MainDataResponse } from '../budgets/dto/main-data/main-data.dto';
+import { MainDataResponse } from './DTO/mainData.dto';
 
 @Controller('main-data')
 export class MainDataController {

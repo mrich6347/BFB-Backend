@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { BudgetsService } from '../budgets/budgets.service';
-import { MainDataResponse } from '../budgets/dto/main-data/main-data.dto';
+import { MainDataResponse } from './DTO/mainData.dto';
 
 @Injectable()
 export class MainDataService {

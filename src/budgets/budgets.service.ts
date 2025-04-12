@@ -1,7 +1,6 @@
 import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { SupabaseClient } from '@supabase/supabase-js';
-import { CreateBudgetDto } from './dto/create-budget.dto';
-import { UpdateBudgetDto } from './dto/update-budget.dto';
+import { CreateBudgetDto } from './DTO/budget.dto';
 import { Budget } from './entities/budget.entity';
 import { SupabaseService } from '../supabase/supabase.service';
 
@@ -66,10 +65,6 @@ export class BudgetsService {
       throw new Error(error.message);
     }
     return data;
-  }
-
-  update(id: number, updateBudgetDto: UpdateBudgetDto) {
-    return `This action updates a #${id} budget`;
   }
 
   remove(id: number) {

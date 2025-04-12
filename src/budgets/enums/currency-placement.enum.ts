@@ -1,5 +1,4 @@
 export enum CurrencyPlacement {
   BEFORE = 'BEFORE',
-  AFTER = 'AFTER',
-  NONE = 'NONE'
+  AFTER = 'AFTER'
 } 
