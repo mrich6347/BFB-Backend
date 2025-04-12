@@ -19,7 +19,6 @@ export class SupabaseAuthGuard implements CanActivate {
   canActivate(
     context: ExecutionContext,
   ): boolean | Promise<boolean> | Observable<boolean> {
-    console.log('SupabaseAuthGuard');
     const request = context.switchToHttp().getRequest();
     return this.validateRequest(request);
   }
