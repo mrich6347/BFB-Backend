@@ -3,7 +3,6 @@ import { AccountResponse, CreateAccountDto } from './dto/create-account.dto';
 import { SupabaseService } from '../supabase/supabase.service';
 import { SupabaseClient } from '@supabase/supabase-js';
 
-
 @Injectable()
 export class AccountsService {
   private supabase: SupabaseClient;
@@ -13,7 +12,6 @@ export class AccountsService {
   }
 
   async create(createAccountDto: CreateAccountDto, userId: string, authToken: string): Promise<AccountResponse> {
-
     const supabase = this.supabaseService.getAuthenticatedClient(authToken);
 
     const { current_balance, ...accountData } = createAccountDto;
@@ -24,7 +22,6 @@ export class AccountsService {
       cleared_balance: current_balance,
       working_balance: current_balance
     }
-    
     
     const { data, error } = await supabase
       .from('accounts')

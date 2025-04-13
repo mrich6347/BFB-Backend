@@ -6,6 +6,7 @@ import { createClient, SupabaseClient } from '@supabase/supabase-js';
 export class SupabaseService {
   private supabaseUrl: string;
   private supabaseKey: string;
+  private authenticatedClients: Map<string, SupabaseClient> = new Map();
 
   constructor(private configService: ConfigService) {
     this.supabaseUrl = this.configService.get<string>('SUPABASE_URL') || '';
@@ -17,13 +18,20 @@ export class SupabaseService {
   }
 
   getAuthenticatedClient(token: string): SupabaseClient {
-    // Create a new client with custom authorization header
-    return createClient(this.supabaseUrl, this.supabaseKey, {
-      global: {
-        headers: {
-          Authorization: `Bearer ${token}`
+    // Check if we already have a client for this token
+    if (!this.authenticatedClients.has(token)) {
+      // Create and cache a new client with custom authorization header
+      const client = createClient(this.supabaseUrl, this.supabaseKey, {
+        global: {
+          headers: {
+            Authorization: `Bearer ${token}`
+          }
         }
-      }
-    });
+      });
+      this.authenticatedClients.set(token, client);
+    }
+    
+    // Return the cached client
+    return this.authenticatedClients.get(token)!;
   }
 }
