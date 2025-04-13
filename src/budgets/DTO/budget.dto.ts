@@ -1,7 +1,6 @@
 import { IsEnum, IsNotEmpty, IsString } from 'class-validator';
-import { CurrencyPlacement } from '../enums/currency-placement.enum';
-import { DateFormat } from '../enums/date-format.enum';
-import { NumberFormat } from '../enums/number-format.enum';
+import { DateFormat, NumberFormat, CurrencyPlacement } from '../entities/budget.entity';
+
 export class CreateBudgetDto {
   @IsString()
   @IsNotEmpty()
@@ -22,6 +21,4 @@ export class CreateBudgetDto {
   @IsEnum(NumberFormat)
   @IsNotEmpty()
   number_format: NumberFormat;
-
-
 }

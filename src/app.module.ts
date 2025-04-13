@@ -6,6 +6,7 @@ import { AuthModule } from "./configurations/auth/auth.module";
 import { BudgetsModule } from './budgets/budgets.module';
 import { SupabaseModule } from './supabase/supabase.module';
 import { MainDataModule } from './main-data/main-data.module';
+import { AccountsModule } from './accounts/accounts.module';
 
 @Module({
   imports: [
@@ -13,7 +14,8 @@ import { MainDataModule } from './main-data/main-data.module';
     AuthModule,
     BudgetsModule,
     SupabaseModule,
-    MainDataModule
+    MainDataModule,
+    AccountsModule
   ],
   controllers: [AppController],
   providers: [AppService],
