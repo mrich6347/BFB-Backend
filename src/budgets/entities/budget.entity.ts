@@ -41,6 +41,8 @@ export class Budget {
   
   currency: string;
   
+  date_format: DateFormat;
+  
   number_format: NumberFormat;
   
   created_at: Date;

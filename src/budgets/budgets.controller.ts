@@ -1,6 +1,6 @@
 import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards, Req, UnauthorizedException } from '@nestjs/common';
 import { BudgetsService } from './budgets.service';
-import { CreateBudgetDto } from './DTO/budget.dto';
+import { BudgetResponse, CreateBudgetDto } from './DTO/budget.dto';
 import { SupabaseAuthGuard } from '../guards/auth.guard';
 import { Budget } from './entities/budget.entity';
 import { AuthService } from '../configurations/auth/auth.service';
@@ -18,7 +18,7 @@ export class BudgetsController {
   }
 
   @Get()
-  async findAll(@Req() req: any): Promise<Budget[]> {
+  async findAll(@Req() req: any): Promise<BudgetResponse[]> {
     const authToken = this.authService.getAuthToken(req);
     return this.budgetsService.findAll(req.user.id, authToken);
   }

@@ -22,3 +22,13 @@ export class CreateBudgetDto {
   @IsNotEmpty()
   number_format: NumberFormat;
 }
+
+export class BudgetResponse {
+  id: string;
+  name: string;
+  currency: string;
+  currency_placement: CurrencyPlacement;
+  date_format: DateFormat;
+  number_format: NumberFormat;
+  updated_at: Date;
+}

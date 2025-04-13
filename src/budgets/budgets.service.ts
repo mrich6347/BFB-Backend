@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { SupabaseClient } from '@supabase/supabase-js';
-import { CreateBudgetDto } from './DTO/budget.dto';
+import { BudgetResponse, CreateBudgetDto } from './DTO/budget.dto';
 import { Budget } from './entities/budget.entity';
 import { SupabaseService } from '../supabase/supabase.service';
 
@@ -35,12 +35,12 @@ export class BudgetsService {
     return data;
   }
 
-  async findAll(userId: string, authToken: string): Promise<Budget[]> {
+  async findAll(userId: string, authToken: string): Promise<BudgetResponse[]> {
     const supabase = this.supabaseService.getAuthenticatedClient(authToken);
     
     const { data, error } = await supabase
       .from('budgets')
-      .select('*')
+      .select('currency, currency_placement, date_format, id, name, number_format, updated_at')
       .eq('user_id', userId)
       .order('created_at', { ascending: false });
 
@@ -48,6 +48,7 @@ export class BudgetsService {
       console.log("ERROR", error);
       throw new Error(error.message);
     }
+
     return data;
   }
 
