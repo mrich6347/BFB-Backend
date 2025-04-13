@@ -9,6 +9,7 @@ export enum AccountType {
 export class Account {
     id: string;
     userId: string | null;
+    budgetId: string | null;
     name: string;
     accountType: AccountType;
     clearedBalance: number;

@@ -18,4 +18,7 @@ export class CreateAccountDto {
     @IsNumber()
     @IsOptional()
     minimum_monthly_payment?: number;
+
+    @IsString()
+    budget_id: string;
 }
