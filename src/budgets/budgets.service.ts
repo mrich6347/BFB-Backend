@@ -51,13 +51,14 @@ export class BudgetsService {
     return data;
   }
 
-  async findOne(id: string, authToken: string) {
+  async findOne(id: string, userId: string, authToken: string) {
    const supabase = this.supabaseService.getAuthenticatedClient(authToken);
 
    const { data, error } = await supabase
       .from('budgets')
       .select('*')
       .eq('id', id)
+      .eq('user_id', userId)
       .single();  
 
     if (error) {

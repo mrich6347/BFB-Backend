@@ -26,7 +26,7 @@ export class BudgetsController {
   @Get(':id')
   async findOne(@Param('id') id: string, @Req() req: any) {
     const authToken = this.authService.getAuthToken(req);
-    return this.budgetsService.findOne(id, authToken);
+    return this.budgetsService.findOne(id, req.user.id, authToken);
   }
 
   @Delete(':id')

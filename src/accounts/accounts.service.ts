@@ -40,8 +40,19 @@ export class AccountsService {
     return data;
   }
 
-  findAll() {
-    return `This action returns all accounts`;
+  async findAll(userId: string, authToken: string) {
+    const supabase = this.supabaseService.getAuthenticatedClient(authToken);
+
+    const { data, error } = await supabase
+      .from('accounts') 
+      .select('*')
+      .eq('user_id', userId);
+
+    if (error) {
+      throw new Error(error.message);
+    }
+
+    return data;
   }
 
   findOne(id: number) {

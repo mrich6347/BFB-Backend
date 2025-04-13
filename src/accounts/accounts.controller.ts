@@ -18,8 +18,9 @@ export class AccountsController {
   }
 
   @Get()
-  findAll() {
-    return this.accountsService.findAll();
+  findAll(@Req() req: any) {
+    const authToken = this.authService.getAuthToken(req);
+    return this.accountsService.findAll(authToken, req.user.id);
   }
 
   @Get(':id')
