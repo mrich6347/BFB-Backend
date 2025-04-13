@@ -2,7 +2,6 @@ import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards, Req, Unau
 import { BudgetsService } from './budgets.service';
 import { BudgetResponse, CreateBudgetDto } from './DTO/budget.dto';
 import { SupabaseAuthGuard } from '../guards/auth.guard';
-import { Budget } from './entities/budget.entity';
 import { AuthService } from '../configurations/auth/auth.service';
 
 
@@ -12,7 +11,7 @@ export class BudgetsController {
   constructor(private readonly budgetsService: BudgetsService, private readonly authService: AuthService) {}
 
   @Post()
-  async create(@Body() createBudgetDto: CreateBudgetDto, @Req() req: any): Promise<Budget> {
+  async create(@Body() createBudgetDto: CreateBudgetDto, @Req() req: any): Promise<BudgetResponse> {
     const authToken = this.authService.getAuthToken(req);
     return this.budgetsService.create(createBudgetDto, req.user.id, authToken);
   }

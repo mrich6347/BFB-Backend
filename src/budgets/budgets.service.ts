@@ -13,7 +13,7 @@ export class BudgetsService {
   }
 
 
-  async create(createBudgetDto: CreateBudgetDto, userId: string, authToken: string): Promise<Budget> {
+  async create(createBudgetDto: CreateBudgetDto, userId: string, authToken: string): Promise<BudgetResponse> {
     const supabase = this.supabaseService.getAuthenticatedClient(authToken);
     
     let payload = {
@@ -24,7 +24,7 @@ export class BudgetsService {
     const { data, error } = await supabase
       .from('budgets')
       .insert([payload])
-      .select()
+      .select('currency, currency_placement, date_format, id, name, number_format, updated_at')
       .single();
 
     if (error) {
