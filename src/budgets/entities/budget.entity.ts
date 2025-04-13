@@ -1,5 +1,5 @@
 import { CurrencyPlacement } from '../enums/currency-placement.enum';
-
+import { NumberFormat } from '../enums/number-format.enum';
 export class Budget {
   id: number;
   
@@ -11,7 +11,7 @@ export class Budget {
   
   currency: string;
   
-  number_format: string;
+  number_format: NumberFormat;
   
   created_at: Date;
   
