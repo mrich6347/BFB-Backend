@@ -7,8 +7,10 @@ export class MainDataService {
     constructor(private readonly budgetsService: BudgetsService, private readonly accountsService: AccountsService) {}
 
     async getMainData(budgetId: string, authToken: string, userId: string): Promise<MainDataResponse> {
-        const budget = await this.budgetsService.findOne(budgetId, userId, authToken);
-        const accounts = await this.accountsService.findAll(userId, authToken);
+        const [budget, accounts] = await Promise.all([
+            this.budgetsService.findOne(budgetId, userId, authToken),
+            this.accountsService.findAll(userId, authToken, budgetId)
+        ]);
         return {
            budget,
            accounts

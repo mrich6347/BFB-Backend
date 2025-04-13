@@ -17,17 +17,6 @@ export class AccountsController {
     return this.accountsService.create(createAccountDto, req.user.id, authToken);
   }
 
-  @Get()
-  findAll(@Req() req: any) {
-    const authToken = this.authService.getAuthToken(req);
-    return this.accountsService.findAll(authToken, req.user.id);
-  }
-
-  @Get(':id')
-  findOne(@Param('id') id: string) {
-    return this.accountsService.findOne(+id);
-  }
-
   @Patch(':id')
   update(@Param('id') id: string, @Body() updateAccountDto: UpdateAccountDto) {
     return this.accountsService.update(+id, updateAccountDto);

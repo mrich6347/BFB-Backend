@@ -40,13 +40,14 @@ export class AccountsService {
     return data;
   }
 
-  async findAll(userId: string, authToken: string) {
+  async findAll(userId: string, authToken: string, budgetId: string) {
     const supabase = this.supabaseService.getAuthenticatedClient(authToken);
 
     const { data, error } = await supabase
       .from('accounts') 
       .select('*')
-      .eq('user_id', userId);
+      .eq('user_id', userId)
+      .eq('budget_id', budgetId);
 
     if (error) {
       throw new Error(error.message);
