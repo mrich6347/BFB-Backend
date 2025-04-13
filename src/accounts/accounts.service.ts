@@ -1,9 +1,8 @@
 import { Injectable } from '@nestjs/common';
-import { CreateAccountDto } from './dto/create-account.dto';
-import { UpdateAccountDto } from './dto/update-account.dto';
+import { AccountResponse, CreateAccountDto } from './dto/create-account.dto';
 import { SupabaseService } from '../supabase/supabase.service';
 import { SupabaseClient } from '@supabase/supabase-js';
-import { Account } from './entities/account.entity';
+
 
 @Injectable()
 export class AccountsService {
@@ -13,7 +12,7 @@ export class AccountsService {
     this.supabase = this.supabaseService.client;
   }
 
-  async create(createAccountDto: CreateAccountDto, userId: string, authToken: string): Promise<Account> {
+  async create(createAccountDto: CreateAccountDto, userId: string, authToken: string): Promise<AccountResponse> {
 
     const supabase = this.supabaseService.getAuthenticatedClient(authToken);
 
@@ -30,7 +29,7 @@ export class AccountsService {
     const { data, error } = await supabase
       .from('accounts')
       .insert(payload)
-      .select()
+      .select('id, name, account_type, budget_id, interest_rate, minimum_monthly_payment, cleared_balance, uncleared_balance, working_balance, is_active')
       .single();
     
     if (error) {
@@ -40,12 +39,12 @@ export class AccountsService {
     return data;
   }
 
-  async findAll(userId: string, authToken: string, budgetId: string) {
+  async findAll(userId: string, authToken: string, budgetId: string): Promise<AccountResponse[]> {
     const supabase = this.supabaseService.getAuthenticatedClient(authToken);
 
     const { data, error } = await supabase
       .from('accounts') 
-      .select('*')
+      .select('id, name, account_type, budget_id, interest_rate, minimum_monthly_payment, cleared_balance, uncleared_balance, working_balance, is_active')
       .eq('user_id', userId)
       .eq('budget_id', budgetId);
 
@@ -54,17 +53,5 @@ export class AccountsService {
     }
 
     return data;
-  }
-
-  findOne(id: number) {
-    return `This action returns a #${id} account`;
-  }
-
-  update(id: number, updateAccountDto: UpdateAccountDto) {
-    return `This action updates a #${id} account`;
-  }
-
-  remove(id: number) {
-    return `This action removes a #${id} account`;
   }
 }

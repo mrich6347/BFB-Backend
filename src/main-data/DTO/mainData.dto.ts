@@ -1,6 +1,6 @@
-import { Budget } from "../../budgets/entities/budget.entity";
-import { Account } from "../../accounts/entities/account.entity";
+import { AccountResponse } from "../../accounts/dto/create-account.dto";
+import { BudgetResponse } from "../../budgets/DTO/budget.dto";
 export class MainDataResponse {
-    budget: Budget;
-    accounts: Account[];
+    budget: BudgetResponse;
+    accounts: AccountResponse[];
 }

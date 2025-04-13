@@ -22,3 +22,16 @@ export class CreateAccountDto {
     @IsString()
     budget_id: string;
 }
+
+export class AccountResponse {
+    id: string;
+    name: string;
+    account_type: AccountType;
+    budget_id: string;
+    interest_rate?: number;
+    minimum_monthly_payment?: number;
+    cleared_balance: number;
+    uncleared_balance: number;
+    working_balance: number;
+    is_active: boolean;
+}
