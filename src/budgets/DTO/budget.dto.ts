@@ -6,21 +6,22 @@ export class CreateBudgetDto {
   @IsNotEmpty()
   name: string;
 
-  @IsEnum(CurrencyPlacement)
-  @IsNotEmpty()
-  currency_placement: CurrencyPlacement;
-
-  @IsEnum(DateFormat)
-  @IsNotEmpty()
-  date_format: DateFormat;
-
   @IsString()
   @IsNotEmpty()
   currency: string;
 
+  @IsEnum(CurrencyPlacement)
+  @IsNotEmpty()
+  currency_placement: CurrencyPlacement;
+
+
   @IsEnum(NumberFormat)
   @IsNotEmpty()
   number_format: NumberFormat;
+
+  @IsEnum(DateFormat)
+  @IsNotEmpty()
+  date_format: DateFormat;
 }
 
 export class BudgetResponse {
