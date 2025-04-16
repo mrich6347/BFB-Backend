@@ -10,7 +10,7 @@ export class CreateAccountDto {
 
     @IsNumber()
     current_balance: number;
-
+                                            
     @IsNumber()
     @IsOptional()
     interest_rate?: number;

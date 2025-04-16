@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { AccountResponse, CreateAccountDto } from './dto/create-account.dto';
+import { AccountResponse, CreateAccountDto } from './DTO/create-account.dto';
 import { SupabaseService } from '../supabase/supabase.service';
 import { SupabaseClient } from '@supabase/supabase-js';
 
