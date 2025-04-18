@@ -1,6 +1,6 @@
 import { Controller, Get, Post, Body, Patch, Param, Delete, Req, UseGuards } from '@nestjs/common';
 import { AccountsService } from './accounts.service';
-import { AccountResponse, CreateAccountDto } from './DTO/create-account.dto';
+import { AccountResponse, CreateAccountDto } from './DTO/account.dto';
 import { AuthService } from '../configurations/auth/auth.service';
 import { SupabaseAuthGuard } from '../guards/auth.guard';
 
