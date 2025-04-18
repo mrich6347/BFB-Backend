@@ -1,7 +1,11 @@
-import { IsString, IsEnum, IsNumber, IsBoolean, IsOptional } from 'class-validator';
+import { IsString, IsEnum, IsNumber, IsBoolean, IsOptional, IsUUID } from 'class-validator';
 import { AccountType } from '../entities/account.entity';
 
 export class CreateAccountDto {
+    @IsString()
+    @IsUUID()
+    id: string;
+
     @IsString()
     name: string;
 
@@ -13,13 +17,14 @@ export class CreateAccountDto {
                                             
     @IsNumber()
     @IsOptional()
-    interest_rate?: number;
+    interest_rate: number;
 
     @IsNumber()
     @IsOptional()
-    minimum_monthly_payment?: number;
+    minimum_monthly_payment: number;
 
     @IsString()
+    @IsUUID()
     budget_id: string;
 }
 
