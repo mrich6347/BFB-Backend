@@ -76,7 +76,7 @@ export class BudgetsService {
     const { data, error } = await supabase
       .from('budgets')
       .select('id')
-      .eq('name', name)
+      .ilike('name', name)
       .eq('user_id', userId);
 
     if (error) {
