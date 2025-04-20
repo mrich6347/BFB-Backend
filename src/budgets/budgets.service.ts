@@ -39,12 +39,16 @@ export class BudgetsService {
   async update(id: string, updateBudgetDto: UpdateBudgetDto, userId: string, authToken: string): Promise<BudgetResponse> {
     const supabase = this.supabaseService.getAuthenticatedClient(authToken);
 
+    if (updateBudgetDto.name) {
+      await this.checkForExistingBudget(updateBudgetDto.name, userId, authToken);
+    }
+
     const { data, error } = await supabase
       .from('budgets')
       .update(updateBudgetDto)
       .eq('id', id)
       .eq('user_id', userId)
-      .select('currency, currency_placement, date_format, id, name, number_format, updated_at')
+      .select('id, currency, currency_placement, date_format, id, name, number_format, updated_at')
       .single();
 
     if (error) {
@@ -77,7 +81,7 @@ export class BudgetsService {
 
    const { data, error } = await supabase
       .from('budgets')
-      .select('currency, currency_placement, date_format, id, name, number_format, updated_at')
+      .select('id, currency, currency_placement, date_format, id, name, number_format, updated_at')
       .eq('id', id)
       .eq('user_id', userId)
       .single();  
