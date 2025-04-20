@@ -98,7 +98,7 @@ export class BudgetsService {
 
     const { data, error } = await supabase
       .from('budgets')
-      .select('id')
+      .select('id, name')
       .ilike('name', name)
       .eq('user_id', userId);
 
@@ -106,7 +106,7 @@ export class BudgetsService {
       throw new Error(error.message);
     }
 
-    if (data && data.length > 0) {
+    if (data && data.length > 0 && data[0].name !== name) {
       throw new ConflictException(`A budget already exists with the name '${name}'`);
     }
   }
