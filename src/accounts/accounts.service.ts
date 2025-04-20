@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { ConflictException, Injectable } from '@nestjs/common';
 import { AccountResponse, CreateAccountDto } from './DTO/account.dto';
 import { SupabaseService } from '../supabase/supabase.service';
 import { SupabaseClient } from '@supabase/supabase-js';
@@ -22,6 +22,8 @@ export class AccountsService {
       cleared_balance: current_balance,
       working_balance: current_balance
     }
+
+    await this.checkForExistingAccount(userId, authToken, accountData.budget_id, accountData.name);
     
     const { data, error } = await supabase
       .from('accounts')
@@ -51,4 +53,24 @@ export class AccountsService {
 
     return data;
   }
+
+  async checkForExistingAccount(userId: string, authToken: string, budgetId: string, accountName: string): Promise<void> {
+    const supabase = this.supabaseService.getAuthenticatedClient(authToken);
+
+    const { data, error } = await supabase
+      .from('accounts')
+      .select('id') 
+      .eq('user_id', userId)
+      .eq('budget_id', budgetId)
+      .ilike('name', accountName);
+
+    if (error) {
+      throw new Error(error.message);
+    }
+
+    if (data.length > 0) {
+      throw new ConflictException(`An account already exists with the name '${accountName}'`);
+    }
+  }
+
 }

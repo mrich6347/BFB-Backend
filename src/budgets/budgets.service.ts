@@ -84,7 +84,7 @@ export class BudgetsService {
     }
 
     if (data && data.length > 0) {
-      throw new ConflictException('Budget with this name already exists');
+      throw new ConflictException(`A budget already exists with the name '${name}'`);
     }
   }
 
