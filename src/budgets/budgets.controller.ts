@@ -1,6 +1,6 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards, Req, UnauthorizedException } from '@nestjs/common';
+import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards, Req, UnauthorizedException, ParseUUIDPipe } from '@nestjs/common';
 import { BudgetsService } from './budgets.service';
-import { BudgetResponse, CreateBudgetDto } from './DTO/budget.dto';
+import { BudgetResponse, CreateBudgetDto, UpdateBudgetDto } from './DTO/budget.dto';
 import { SupabaseAuthGuard } from '../guards/auth.guard';
 import { AuthService } from '../configurations/auth/auth.service';
 
@@ -28,9 +28,9 @@ export class BudgetsController {
     return this.budgetsService.findOne(id, req.user.id, authToken);
   }
 
-  @Delete(':id')
-  remove(@Param('id') id: string) {
-    return this.budgetsService.remove(+id);
+  @Patch(':id')
+  async update(@Param('id', new ParseUUIDPipe()) id: string, @Body() updateBudgetDto: UpdateBudgetDto, @Req() req: any) {
+    const authToken = this.authService.getAuthToken(req);
+    return this.budgetsService.update(id, updateBudgetDto, req.user.id, authToken);
   }
-
 }

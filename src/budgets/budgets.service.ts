@@ -1,6 +1,6 @@
 import { Injectable, ConflictException } from '@nestjs/common';
 import { SupabaseClient } from '@supabase/supabase-js';
-import { BudgetResponse, CreateBudgetDto } from './DTO/budget.dto';
+import { BudgetResponse, CreateBudgetDto, UpdateBudgetDto } from './DTO/budget.dto';
 import { SupabaseService } from '../supabase/supabase.service';
 
 @Injectable()
@@ -30,6 +30,25 @@ export class BudgetsService {
 
     if (error) {
       console.log("ERROR", error)
+      throw new Error(error.message);
+    }
+
+    return data;
+  }
+
+  async update(id: string, updateBudgetDto: UpdateBudgetDto, userId: string, authToken: string): Promise<BudgetResponse> {
+    const supabase = this.supabaseService.getAuthenticatedClient(authToken);
+
+    const { data, error } = await supabase
+      .from('budgets')
+      .update(updateBudgetDto)
+      .eq('id', id)
+      .eq('user_id', userId)
+      .select('currency, currency_placement, date_format, id, name, number_format, updated_at')
+      .single();
+
+    if (error) {
+      console.log("ERROR", error);
       throw new Error(error.message);
     }
 
@@ -86,9 +105,5 @@ export class BudgetsService {
     if (data && data.length > 0) {
       throw new ConflictException(`A budget already exists with the name '${name}'`);
     }
-  }
-
-  async remove(id: number) {
-    return `This action removes a #${id} budget`;
   }
 }

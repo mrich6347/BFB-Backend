@@ -1,4 +1,4 @@
-import { IsEnum, IsNotEmpty, IsString } from 'class-validator';
+import { IsEnum, IsNotEmpty, IsOptional, IsString, IsUUID } from 'class-validator';
 import { DateFormat, NumberFormat, CurrencyPlacement } from '../entities/budget.entity';
 
 export class CreateBudgetDto {
@@ -22,6 +22,32 @@ export class CreateBudgetDto {
   @IsEnum(DateFormat)
   @IsNotEmpty()
   date_format: DateFormat;
+}
+
+export class UpdateBudgetDto {
+
+
+  @IsString()
+  @IsNotEmpty()
+  @IsOptional()
+  name: string;
+
+  @IsString()
+  @IsOptional()
+  currency: string;
+
+  @IsEnum(CurrencyPlacement)
+  @IsOptional()
+  currency_placement: CurrencyPlacement;
+
+  @IsEnum(DateFormat)
+  @IsOptional()
+  date_format: DateFormat;
+
+  @IsEnum(NumberFormat)
+  @IsOptional()
+  number_format: NumberFormat;
+
 }
 
 export class BudgetResponse {
