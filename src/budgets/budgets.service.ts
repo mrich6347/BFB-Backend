@@ -54,7 +54,7 @@ export class BudgetsService {
       user_id: userId,
     }
 
-    await this.checkForExistingBudget(createBudgetDto.name, userId, authToken);
+    await this.checkForExistingBudgetByName(createBudgetDto.name, userId, authToken);
 
     const { data, error } = await supabase
       .from('budgets')
@@ -74,7 +74,7 @@ export class BudgetsService {
     const supabase = this.supabaseService.getAuthenticatedClient(authToken);
 
     if (updateBudgetDto.name) {
-      await this.checkForExistingBudget(updateBudgetDto.name, userId, authToken);
+      await this.checkForExistingBudgetByName(updateBudgetDto.name, userId, authToken);
     }
 
     const { data, error } = await supabase
@@ -93,7 +93,7 @@ export class BudgetsService {
     return data;
   }
 
-  async checkForExistingBudget(name: string, userId: string, authToken: string): Promise<void> {
+  async checkForExistingBudgetByName(name: string, userId: string, authToken: string): Promise<void> {
     const supabase = this.supabaseService.getAuthenticatedClient(authToken);
 
     const { data, error } = await supabase
