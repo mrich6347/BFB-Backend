@@ -11,6 +11,40 @@ export class BudgetsService {
     this.supabase = this.supabaseService.client;
   }
 
+  async findOne(id: string, userId: string, authToken: string): Promise<BudgetResponse> {
+    const supabase = this.supabaseService.getAuthenticatedClient(authToken);
+ 
+    const { data, error } = await supabase
+       .from('budgets')
+       .select('id, currency, currency_placement, date_format, id, name, number_format, updated_at')
+       .eq('id', id)
+       .eq('user_id', userId)
+       .single();  
+ 
+     if (error) {
+       console.log("ERROR", error);
+       throw new Error(error.message);
+     }
+     return data;
+   }
+
+  async findAll(userId: string, authToken: string): Promise<BudgetResponse[]> {
+    const supabase = this.supabaseService.getAuthenticatedClient(authToken);
+    
+    const { data, error } = await supabase
+      .from('budgets')
+      .select('currency, currency_placement, date_format, id, name, number_format, updated_at')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.log("ERROR", error);
+      throw new Error(error.message);
+    }
+
+    return data;
+  }
+
 
   async create(createBudgetDto: CreateBudgetDto, userId: string, authToken: string): Promise<BudgetResponse> {
     const supabase = this.supabaseService.getAuthenticatedClient(authToken);
@@ -56,40 +90,6 @@ export class BudgetsService {
       throw new Error(error.message);
     }
 
-    return data;
-  }
-
-  async findAll(userId: string, authToken: string): Promise<BudgetResponse[]> {
-    const supabase = this.supabaseService.getAuthenticatedClient(authToken);
-    
-    const { data, error } = await supabase
-      .from('budgets')
-      .select('currency, currency_placement, date_format, id, name, number_format, updated_at')
-      .eq('user_id', userId)
-      .order('created_at', { ascending: false });
-
-    if (error) {
-      console.log("ERROR", error);
-      throw new Error(error.message);
-    }
-
-    return data;
-  }
-
-  async findOne(id: string, userId: string, authToken: string): Promise<BudgetResponse> {
-   const supabase = this.supabaseService.getAuthenticatedClient(authToken);
-
-   const { data, error } = await supabase
-      .from('budgets')
-      .select('id, currency, currency_placement, date_format, id, name, number_format, updated_at')
-      .eq('id', id)
-      .eq('user_id', userId)
-      .single();  
-
-    if (error) {
-      console.log("ERROR", error);
-      throw new Error(error.message);
-    }
     return data;
   }
 
