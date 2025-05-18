@@ -7,6 +7,8 @@ import { BudgetsModule } from './budgets/budgets.module';
 import { SupabaseModule } from './supabase/supabase.module';
 import { MainDataModule } from './main-data/main-data.module';
 import { AccountsModule } from './accounts/accounts.module';
+import { CategoryGroupsModule } from './category-groups/category-groups.module';
+import { CategoriesModule } from './categories/categories.module';
 
 @Module({
   imports: [
@@ -15,7 +17,9 @@ import { AccountsModule } from './accounts/accounts.module';
     BudgetsModule,
     SupabaseModule,
     MainDataModule,
-    AccountsModule
+    AccountsModule,
+    CategoryGroupsModule,
+    CategoriesModule
   ],
   controllers: [AppController],
   providers: [AppService],

@@ -4,9 +4,18 @@ import { MainDataController } from './main-data.controller';
 import { AuthModule } from '../configurations/auth/auth.module';
 import { BudgetsModule } from '../budgets/budgets.module';
 import { AccountsModule } from '../accounts/accounts.module';
+import { CategoryGroupsModule } from '../category-groups/category-groups.module';
+import { CategoriesModule } from '../categories/categories.module';
+
 @Module({
   controllers: [MainDataController],
   providers: [MainDataService],
-  imports: [AuthModule, BudgetsModule, AccountsModule],
+  imports: [
+    AuthModule,
+    BudgetsModule,
+    AccountsModule,
+    CategoryGroupsModule,
+    CategoriesModule
+  ],
 })
 export class MainDataModule {}
