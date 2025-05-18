@@ -9,6 +9,7 @@ import { MainDataModule } from './main-data/main-data.module';
 import { AccountsModule } from './accounts/accounts.module';
 import { CategoryGroupsModule } from './category-groups/category-groups.module';
 import { CategoriesModule } from './categories/categories.module';
+import { DatabaseManagementModule } from './database-management/database-management.module';
 
 @Module({
   imports: [
@@ -19,7 +20,8 @@ import { CategoriesModule } from './categories/categories.module';
     MainDataModule,
     AccountsModule,
     CategoryGroupsModule,
-    CategoriesModule
+    CategoriesModule,
+    DatabaseManagementModule
   ],
   controllers: [AppController],
   providers: [AppService],
