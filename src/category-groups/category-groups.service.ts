@@ -8,7 +8,7 @@ export class CategoryGroupsService {
 
   async create(createCategoryGroupDto: CreateCategoryGroupDto, userId: string, authToken: string): Promise<CategoryGroupResponse> {
     const supabase = this.supabaseService.getAuthenticatedClient(authToken);
-    
+
     const payload = {
       ...createCategoryGroupDto,
       user_id: userId,
@@ -29,7 +29,7 @@ export class CategoryGroupsService {
 
   async findAll(budgetId: string, userId: string, authToken: string): Promise<CategoryGroupResponse[]> {
     const supabase = this.supabaseService.getAuthenticatedClient(authToken);
-    
+
     const { data, error } = await supabase
       .from('category_groups')
       .select('*')
@@ -46,7 +46,7 @@ export class CategoryGroupsService {
 
   async update(id: string, updateCategoryGroupDto: UpdateCategoryGroupDto, userId: string, authToken: string): Promise<CategoryGroupResponse> {
     const supabase = this.supabaseService.getAuthenticatedClient(authToken);
-    
+
     const { data, error } = await supabase
       .from('category_groups')
       .update(updateCategoryGroupDto)
@@ -64,7 +64,7 @@ export class CategoryGroupsService {
 
   async remove(id: string, userId: string, authToken: string): Promise<void> {
     const supabase = this.supabaseService.getAuthenticatedClient(authToken);
-    
+
     const { error } = await supabase
       .from('category_groups')
       .delete()
@@ -78,7 +78,7 @@ export class CategoryGroupsService {
 
   async reorder(reorderDto: ReorderCategoryGroupsDto, userId: string, authToken: string): Promise<void> {
     const supabase = this.supabaseService.getAuthenticatedClient(authToken);
-    
+
     // Update display_order for each group
     for (let i = 0; i < reorderDto.group_ids.length; i++) {
       const { error } = await supabase
