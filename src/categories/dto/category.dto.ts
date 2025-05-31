@@ -48,6 +48,30 @@ export class ReorderCategoriesDto {
   category_ids: string[];
 }
 
+export class MoveMoneyDto {
+  @IsString()
+  @IsUUID()
+  @IsNotEmpty()
+  sourceCategoryId: string;
+
+  @IsString()
+  @IsUUID()
+  @IsNotEmpty()
+  destinationCategoryId: string;
+
+  @IsNumber()
+  @IsNotEmpty()
+  amount: number;
+
+  @IsInt()
+  @IsNotEmpty()
+  year: number;
+
+  @IsInt()
+  @IsNotEmpty()
+  month: number;
+}
+
 export class CategoryResponse {
   id: string;
   name: string;

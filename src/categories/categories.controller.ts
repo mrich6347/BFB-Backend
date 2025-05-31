@@ -1,6 +1,6 @@
 import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards, Req, Query, ParseUUIDPipe, ParseIntPipe } from '@nestjs/common';
 import { CategoriesService } from './categories.service';
-import { CreateCategoryDto, UpdateCategoryDto, CategoryResponse, ReorderCategoriesDto } from './dto/category.dto';
+import { CreateCategoryDto, UpdateCategoryDto, CategoryResponse, ReorderCategoriesDto, MoveMoneyDto } from './dto/category.dto';
 import { SupabaseAuthGuard } from '../guards/auth.guard';
 import { AuthService } from '../configurations/auth/auth.service';
 
@@ -62,5 +62,19 @@ export class CategoriesController {
   async reorder(@Body() reorderDto: ReorderCategoriesDto, @Req() req: any): Promise<void> {
     const authToken = this.authService.getAuthToken(req);
     return this.categoriesService.reorder(reorderDto, req.user.id, authToken);
+  }
+
+  @Post('move-money')
+  async moveMoney(@Body() moveMoneyDto: MoveMoneyDto, @Req() req: any): Promise<void> {
+    const authToken = this.authService.getAuthToken(req);
+    return this.categoriesService.moveMoney(
+      moveMoneyDto.sourceCategoryId,
+      moveMoneyDto.destinationCategoryId,
+      moveMoneyDto.amount,
+      moveMoneyDto.year,
+      moveMoneyDto.month,
+      req.user.id,
+      authToken
+    );
   }
 }

@@ -265,7 +265,7 @@ export class CategoriesService {
 
   async reorder(reorderDto: ReorderCategoriesDto, userId: string, authToken: string): Promise<void> {
     const supabase = this.supabaseService.getAuthenticatedClient(authToken);
-    
+
     // Update display_order for each category
     for (let i = 0; i < reorderDto.category_ids.length; i++) {
       const { error } = await supabase
@@ -276,6 +276,131 @@ export class CategoriesService {
 
       if (error) {
         throw new Error(error.message);
+      }
+    }
+  }
+
+  async moveMoney(
+    sourceCategoryId: string,
+    destinationCategoryId: string,
+    amount: number,
+    year: number,
+    month: number,
+    userId: string,
+    authToken: string
+  ): Promise<void> {
+    const supabase = this.supabaseService.getAuthenticatedClient(authToken);
+
+    // Validate that both categories exist and belong to the user
+    const { data: categories, error: categoriesError } = await supabase
+      .from('categories')
+      .select('id, budget_id')
+      .in('id', [sourceCategoryId, destinationCategoryId])
+      .eq('user_id', userId);
+
+    if (categoriesError) {
+      throw new Error(categoriesError.message);
+    }
+
+    if (categories.length !== 2) {
+      throw new Error('One or both categories not found');
+    }
+
+    // Ensure both categories belong to the same budget
+    const sourceBudgetId = categories.find(c => c.id === sourceCategoryId)?.budget_id;
+    const destinationBudgetId = categories.find(c => c.id === destinationCategoryId)?.budget_id;
+
+    if (sourceBudgetId !== destinationBudgetId) {
+      throw new Error('Cannot move money between categories in different budgets');
+    }
+
+    // Get current balances for both categories
+    const { data: balances, error: balancesError } = await supabase
+      .from('category_balances')
+      .select('category_id, available')
+      .in('category_id', [sourceCategoryId, destinationCategoryId])
+      .eq('user_id', userId)
+      .eq('year', year)
+      .eq('month', month);
+
+    if (balancesError) {
+      throw new Error(balancesError.message);
+    }
+
+    const sourceBalance = balances.find(b => b.category_id === sourceCategoryId);
+    const destinationBalance = balances.find(b => b.category_id === destinationCategoryId);
+
+    if (!sourceBalance) {
+      throw new Error('Source category balance not found for the specified month');
+    }
+
+    // Validate that source has enough available money
+    if ((sourceBalance.available || 0) < amount) {
+      throw new Error('Insufficient available balance in source category');
+    }
+
+    // Update source category balance (subtract amount)
+    const { error: sourceError } = await supabase
+      .from('category_balances')
+      .update({ available: (sourceBalance.available || 0) - amount })
+      .eq('category_id', sourceCategoryId)
+      .eq('user_id', userId)
+      .eq('year', year)
+      .eq('month', month);
+
+    if (sourceError) {
+      throw new Error(sourceError.message);
+    }
+
+    // Update or create destination category balance (add amount)
+    if (destinationBalance) {
+      // Update existing balance
+      const { error: destinationError } = await supabase
+        .from('category_balances')
+        .update({ available: (destinationBalance.available || 0) + amount })
+        .eq('category_id', destinationCategoryId)
+        .eq('user_id', userId)
+        .eq('year', year)
+        .eq('month', month);
+
+      if (destinationError) {
+        // Rollback source update
+        await supabase
+          .from('category_balances')
+          .update({ available: sourceBalance.available })
+          .eq('category_id', sourceCategoryId)
+          .eq('user_id', userId)
+          .eq('year', year)
+          .eq('month', month);
+
+        throw new Error(destinationError.message);
+      }
+    } else {
+      // Create new balance record for destination
+      const { error: createError } = await supabase
+        .from('category_balances')
+        .insert({
+          category_id: destinationCategoryId,
+          budget_id: destinationBudgetId,
+          user_id: userId,
+          year,
+          month,
+          assigned: 0,
+          activity: 0,
+          available: amount
+        });
+
+      if (createError) {
+        // Rollback source update
+        await supabase
+          .from('category_balances')
+          .update({ available: sourceBalance.available })
+          .eq('category_id', sourceCategoryId)
+          .eq('user_id', userId)
+          .eq('year', year)
+          .eq('month', month);
+
+        throw new Error(createError.message);
       }
     }
   }
