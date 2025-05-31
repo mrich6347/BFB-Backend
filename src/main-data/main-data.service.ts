@@ -14,12 +14,12 @@ export class MainDataService {
         private readonly categoriesService: CategoriesService
     ) {}
 
-    async getMainData(budgetId: string, authToken: string, userId: string): Promise<MainDataResponse> {
+    async getMainData(budgetId: string, authToken: string, userId: string, year?: number, month?: number): Promise<MainDataResponse> {
         const [budget, accounts, categoryGroups, categories] = await Promise.all([
             this.budgetsService.findOne(budgetId, userId, authToken),
             this.accountsService.findAll(userId, authToken, budgetId),
             this.categoryGroupsService.findAll(budgetId, userId, authToken),
-            this.categoriesService.findAllByBudget(budgetId, userId, authToken)
+            this.categoriesService.findAllByBudget(budgetId, userId, authToken, year, month)
         ]);
 
         return {

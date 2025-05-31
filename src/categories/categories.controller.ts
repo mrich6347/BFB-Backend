@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards, Req, Query, ParseUUIDPipe } from '@nestjs/common';
+import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards, Req, Query, ParseUUIDPipe, ParseIntPipe } from '@nestjs/common';
 import { CategoriesService } from './categories.service';
 import { CreateCategoryDto, UpdateCategoryDto, CategoryResponse, ReorderCategoriesDto } from './dto/category.dto';
 import { SupabaseAuthGuard } from '../guards/auth.guard';
@@ -19,25 +19,37 @@ export class CategoriesController {
   }
 
   @Get()
-  async findAll(@Query('categoryGroupId', new ParseUUIDPipe()) categoryGroupId: string, @Req() req: any): Promise<CategoryResponse[]> {
+  async findAll(
+    @Query('categoryGroupId', new ParseUUIDPipe()) categoryGroupId: string,
+    @Query('year', new ParseIntPipe({ optional: true })) year: number,
+    @Query('month', new ParseIntPipe({ optional: true })) month: number,
+    @Req() req: any
+  ): Promise<CategoryResponse[]> {
     const authToken = this.authService.getAuthToken(req);
-    return this.categoriesService.findAll(categoryGroupId, req.user.id, authToken);
+    return this.categoriesService.findAll(categoryGroupId, req.user.id, authToken, year, month);
   }
 
   @Get('budget/:budgetId')
-  async findAllByBudget(@Param('budgetId', new ParseUUIDPipe()) budgetId: string, @Req() req: any): Promise<CategoryResponse[]> {
+  async findAllByBudget(
+    @Param('budgetId', new ParseUUIDPipe()) budgetId: string,
+    @Query('year', new ParseIntPipe({ optional: true })) year: number,
+    @Query('month', new ParseIntPipe({ optional: true })) month: number,
+    @Req() req: any
+  ): Promise<CategoryResponse[]> {
     const authToken = this.authService.getAuthToken(req);
-    return this.categoriesService.findAllByBudget(budgetId, req.user.id, authToken);
+    return this.categoriesService.findAllByBudget(budgetId, req.user.id, authToken, year, month);
   }
 
   @Patch(':id')
   async update(
     @Param('id', new ParseUUIDPipe()) id: string,
     @Body() updateCategoryDto: UpdateCategoryDto,
+    @Query('year', new ParseIntPipe({ optional: true })) year: number,
+    @Query('month', new ParseIntPipe({ optional: true })) month: number,
     @Req() req: any
   ): Promise<CategoryResponse> {
     const authToken = this.authService.getAuthToken(req);
-    return this.categoriesService.update(id, updateCategoryDto, req.user.id, authToken);
+    return this.categoriesService.update(id, updateCategoryDto, req.user.id, authToken, year, month);
   }
 
   @Delete(':id')

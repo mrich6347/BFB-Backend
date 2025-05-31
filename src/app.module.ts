@@ -9,6 +9,7 @@ import { MainDataModule } from './main-data/main-data.module';
 import { AccountsModule } from './accounts/accounts.module';
 import { CategoryGroupsModule } from './category-groups/category-groups.module';
 import { CategoriesModule } from './categories/categories.module';
+import { CategoryBalancesModule } from './category-balances/category-balances.module';
 import { DatabaseManagementModule } from './database-management/database-management.module';
 
 @Module({
@@ -21,6 +22,7 @@ import { DatabaseManagementModule } from './database-management/database-managem
     AccountsModule,
     CategoryGroupsModule,
     CategoriesModule,
+    CategoryBalancesModule,
     DatabaseManagementModule
   ],
   controllers: [AppController],
