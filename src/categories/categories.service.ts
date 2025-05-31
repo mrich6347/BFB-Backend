@@ -167,8 +167,30 @@ export class CategoriesService {
       const targetYear = year || now.getFullYear();
       const targetMonth = month || (now.getMonth() + 1);
 
-      const balanceUpdate: any = {};
-      if (assigned !== undefined) balanceUpdate.assigned = assigned;
+      // If we're updating assigned, we need to calculate the new available amount
+      let balanceUpdate: any = {};
+
+      if (assigned !== undefined) {
+        // Get current balance to calculate the difference
+        const { data: currentBalance } = await supabase
+          .from('category_balances')
+          .select('assigned, available')
+          .eq('category_id', id)
+          .eq('user_id', userId)
+          .eq('year', targetYear)
+          .eq('month', targetMonth)
+          .single();
+
+        if (currentBalance) {
+          // Calculate the difference in assigned amount
+          const assignedDifference = assigned - (currentBalance.assigned || 0);
+          // Update available by adding the difference (YNAB behavior)
+          balanceUpdate.available = (currentBalance.available || 0) + assignedDifference;
+        }
+
+        balanceUpdate.assigned = assigned;
+      }
+
       if (activity !== undefined) balanceUpdate.activity = activity;
       if (available !== undefined) balanceUpdate.available = available;
 
