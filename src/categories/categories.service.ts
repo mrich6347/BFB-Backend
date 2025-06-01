@@ -142,6 +142,29 @@ export class CategoriesService {
     }));
   }
 
+  async findAllByBudgetWithoutBalances(budgetId: string, userId: string, authToken: string): Promise<CategoryResponse[]> {
+    const supabase = this.supabaseService.getAuthenticatedClient(authToken);
+
+    const { data, error } = await supabase
+      .from('categories')
+      .select('*')
+      .eq('budget_id', budgetId)
+      .eq('user_id', userId)
+      .order('display_order', { ascending: true });
+
+    if (error) {
+      throw new Error(error.message);
+    }
+
+    // Return categories with default balance values
+    return data.map(category => ({
+      ...category,
+      assigned: 0,
+      activity: 0,
+      available: 0
+    }));
+  }
+
   async update(id: string, updateCategoryDto: UpdateCategoryDto, userId: string, authToken: string, year?: number, month?: number): Promise<CategoryResponse> {
     const supabase = this.supabaseService.getAuthenticatedClient(authToken);
 
@@ -171,21 +194,29 @@ export class CategoriesService {
       let balanceUpdate: any = {};
 
       if (assigned !== undefined) {
-        // Get current balance to calculate the difference
-        const { data: currentBalance } = await supabase
+        // Get current balance to calculate the difference (handle case where no balance exists)
+        const { data: currentBalance, error: balanceQueryError } = await supabase
           .from('category_balances')
           .select('assigned, available')
           .eq('category_id', id)
           .eq('user_id', userId)
           .eq('year', targetYear)
           .eq('month', targetMonth)
-          .single();
+          .maybeSingle();
+
+        // If there's an error other than "no rows found", throw it
+        if (balanceQueryError && balanceQueryError.code !== 'PGRST116') {
+          throw new Error(balanceQueryError.message);
+        }
 
         if (currentBalance) {
           // Calculate the difference in assigned amount
           const assignedDifference = assigned - (currentBalance.assigned || 0);
           // Update available by adding the difference (YNAB behavior)
           balanceUpdate.available = (currentBalance.available || 0) + assignedDifference;
+        } else {
+          // No existing balance, so available equals assigned for new records
+          balanceUpdate.available = assigned;
         }
 
         balanceUpdate.assigned = assigned;
@@ -194,46 +225,79 @@ export class CategoriesService {
       if (activity !== undefined) balanceUpdate.activity = activity;
       if (available !== undefined) balanceUpdate.available = available;
 
-      const { error: balanceError } = await supabase
+      // Check if balance record exists
+      const { data: existingBalance } = await supabase
         .from('category_balances')
-        .update(balanceUpdate)
+        .select('id')
         .eq('category_id', id)
         .eq('user_id', userId)
         .eq('year', targetYear)
-        .eq('month', targetMonth);
+        .eq('month', targetMonth)
+        .maybeSingle();
 
-      if (balanceError) {
-        throw new Error(balanceError.message);
+      if (existingBalance) {
+        // Update existing balance
+        const { error: balanceError } = await supabase
+          .from('category_balances')
+          .update(balanceUpdate)
+          .eq('category_id', id)
+          .eq('user_id', userId)
+          .eq('year', targetYear)
+          .eq('month', targetMonth);
+
+        if (balanceError) {
+          throw new Error(balanceError.message);
+        }
+      } else {
+        // Create new balance record
+        const { data: categoryData } = await supabase
+          .from('categories')
+          .select('budget_id')
+          .eq('id', id)
+          .eq('user_id', userId)
+          .single();
+
+        if (!categoryData) {
+          throw new Error('Category not found');
+        }
+
+        const { error: insertError } = await supabase
+          .from('category_balances')
+          .insert({
+            category_id: id,
+            budget_id: categoryData.budget_id,
+            user_id: userId,
+            year: targetYear,
+            month: targetMonth,
+            assigned: balanceUpdate.assigned || 0,
+            activity: balanceUpdate.activity || 0,
+            available: balanceUpdate.available || 0
+          });
+
+        if (insertError) {
+          throw new Error(insertError.message);
+        }
       }
     }
 
-    // Fetch and return the updated category with current balances
-    const now = new Date();
-    const targetYear = year || now.getFullYear();
-    const targetMonth = month || (now.getMonth() + 1);
-
-    const { data, error } = await supabase
+    // Fetch the updated category without balances (since we load balances separately now)
+    const { data: categoryData, error: categoryError } = await supabase
       .from('categories')
-      .select(`
-        *,
-        category_balances!inner(assigned, activity, available)
-      `)
+      .select('*')
       .eq('id', id)
       .eq('user_id', userId)
-      .eq('category_balances.year', targetYear)
-      .eq('category_balances.month', targetMonth)
       .single();
 
-    if (error) {
-      throw new Error(error.message);
+    if (categoryError) {
+      throw new Error(categoryError.message);
     }
 
+    // Return category with default balance values (frontend will merge with actual balances)
     return {
-      ...data,
-      assigned: data.category_balances[0]?.assigned || 0,
-      activity: data.category_balances[0]?.activity || 0,
-      available: data.category_balances[0]?.available || 0,
-      category_balances: undefined
+      ...categoryData,
+      assigned: 0,
+      activity: 0,
+      available: 0
     };
   }
 

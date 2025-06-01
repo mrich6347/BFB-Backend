@@ -4,6 +4,7 @@ import { MainDataResponse } from './DTO/mainData.dto';
 import { AccountsService } from '../accounts/accounts.service';
 import { CategoryGroupsService } from '../category-groups/category-groups.service';
 import { CategoriesService } from '../categories/categories.service';
+import { CategoryBalancesService } from '../category-balances/category-balances.service';
 
 @Injectable()
 export class MainDataService {
@@ -11,22 +12,25 @@ export class MainDataService {
         private readonly budgetsService: BudgetsService,
         private readonly accountsService: AccountsService,
         private readonly categoryGroupsService: CategoryGroupsService,
-        private readonly categoriesService: CategoriesService
+        private readonly categoriesService: CategoriesService,
+        private readonly categoryBalancesService: CategoryBalancesService
     ) {}
 
     async getMainData(budgetId: string, authToken: string, userId: string, year?: number, month?: number): Promise<MainDataResponse> {
-        const [budget, accounts, categoryGroups, categories] = await Promise.all([
+        const [budget, accounts, categoryGroups, categories, categoryBalances] = await Promise.all([
             this.budgetsService.findOne(budgetId, userId, authToken),
             this.accountsService.findAll(userId, authToken, budgetId),
             this.categoryGroupsService.findAll(budgetId, userId, authToken),
-            this.categoriesService.findAllByBudget(budgetId, userId, authToken, year, month)
+            this.categoriesService.findAllByBudgetWithoutBalances(budgetId, userId, authToken),
+            this.categoryBalancesService.findAllByBudget(budgetId, userId, authToken)
         ]);
 
         return {
            budget,
            accounts,
            categoryGroups,
-           categories
+           categories,
+           categoryBalances
         }
     }
 }

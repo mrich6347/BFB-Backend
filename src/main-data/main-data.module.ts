@@ -6,6 +6,7 @@ import { BudgetsModule } from '../budgets/budgets.module';
 import { AccountsModule } from '../accounts/accounts.module';
 import { CategoryGroupsModule } from '../category-groups/category-groups.module';
 import { CategoriesModule } from '../categories/categories.module';
+import { CategoryBalancesModule } from '../category-balances/category-balances.module';
 
 @Module({
   controllers: [MainDataController],
@@ -15,7 +16,8 @@ import { CategoriesModule } from '../categories/categories.module';
     BudgetsModule,
     AccountsModule,
     CategoryGroupsModule,
-    CategoriesModule
+    CategoriesModule,
+    CategoryBalancesModule
   ],
 })
 export class MainDataModule {}

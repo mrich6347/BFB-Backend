@@ -51,7 +51,7 @@ export class CategoryBalancesService {
 
   async findByBudgetAndMonth(budgetId: string, year: number, month: number, userId: string, authToken: string): Promise<CategoryBalanceResponse[]> {
     const supabase = this.supabaseService.getAuthenticatedClient(authToken);
-    
+
     const { data, error } = await supabase
       .from('category_balances')
       .select('*')
@@ -59,6 +59,24 @@ export class CategoryBalancesService {
       .eq('year', year)
       .eq('month', month)
       .eq('user_id', userId);
+
+    if (error) {
+      throw new Error(error.message);
+    }
+
+    return data || [];
+  }
+
+  async findAllByBudget(budgetId: string, userId: string, authToken: string): Promise<CategoryBalanceResponse[]> {
+    const supabase = this.supabaseService.getAuthenticatedClient(authToken);
+
+    const { data, error } = await supabase
+      .from('category_balances')
+      .select('*')
+      .eq('budget_id', budgetId)
+      .eq('user_id', userId)
+      .order('year', { ascending: true })
+      .order('month', { ascending: true });
 
     if (error) {
       throw new Error(error.message);
