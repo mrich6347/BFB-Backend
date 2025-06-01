@@ -84,3 +84,8 @@ export class CategoryResponse {
   created_at: Date;
   updated_at: Date;
 }
+
+export class CategoryWithReadyToAssignResponse {
+  category: CategoryResponse;
+  readyToAssign: number;
+}

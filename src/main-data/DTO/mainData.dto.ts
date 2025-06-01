@@ -10,4 +10,5 @@ export class MainDataResponse {
     categoryGroups: CategoryGroupResponse[];
     categories: CategoryResponse[];
     categoryBalances: CategoryBalanceResponse[];
+    readyToAssign: number;
 }

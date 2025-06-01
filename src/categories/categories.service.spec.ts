@@ -1,10 +1,12 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { CategoriesService } from './categories.service';
 import { SupabaseService } from '../supabase/supabase.service';
+import { ReadyToAssignService } from '../ready-to-assign/ready-to-assign.service';
 
 describe('CategoriesService', () => {
   let service: CategoriesService;
   let supabaseService: SupabaseService;
+  let readyToAssignService: ReadyToAssignService;
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -25,11 +27,18 @@ describe('CategoriesService', () => {
             }),
           },
         },
+        {
+          provide: ReadyToAssignService,
+          useValue: {
+            calculateReadyToAssign: jest.fn().mockResolvedValue(1000),
+          },
+        },
       ],
     }).compile();
 
     service = module.get<CategoriesService>(CategoriesService);
     supabaseService = module.get<SupabaseService>(SupabaseService);
+    readyToAssignService = module.get<ReadyToAssignService>(ReadyToAssignService);
   });
 
   it('should be defined', () => {

@@ -1,6 +1,6 @@
 import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards, Req, Query, ParseUUIDPipe, ParseIntPipe } from '@nestjs/common';
 import { CategoriesService } from './categories.service';
-import { CreateCategoryDto, UpdateCategoryDto, CategoryResponse, ReorderCategoriesDto, MoveMoneyDto } from './dto/category.dto';
+import { CreateCategoryDto, UpdateCategoryDto, CategoryResponse, ReorderCategoriesDto, MoveMoneyDto, CategoryWithReadyToAssignResponse } from './dto/category.dto';
 import { SupabaseAuthGuard } from '../guards/auth.guard';
 import { AuthService } from '../configurations/auth/auth.service';
 
@@ -13,7 +13,7 @@ export class CategoriesController {
   ) {}
 
   @Post()
-  async create(@Body() createCategoryDto: CreateCategoryDto, @Req() req: any): Promise<CategoryResponse> {
+  async create(@Body() createCategoryDto: CreateCategoryDto, @Req() req: any): Promise<CategoryWithReadyToAssignResponse> {
     const authToken = this.authService.getAuthToken(req);
     return this.categoriesService.create(createCategoryDto, req.user.id, authToken);
   }
@@ -49,7 +49,7 @@ export class CategoriesController {
     @Query('month', new ParseIntPipe({ optional: true })) month?: number,
     @Query('currentUserYear', new ParseIntPipe({ optional: true })) currentUserYear?: number,
     @Query('currentUserMonth', new ParseIntPipe({ optional: true })) currentUserMonth?: number
-  ): Promise<CategoryResponse> {
+  ): Promise<CategoryWithReadyToAssignResponse> {
     const authToken = this.authService.getAuthToken(req);
     return this.categoriesService.update(id, updateCategoryDto, req.user.id, authToken, year, month, currentUserYear, currentUserMonth);
   }

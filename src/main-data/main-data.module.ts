@@ -7,6 +7,7 @@ import { AccountsModule } from '../accounts/accounts.module';
 import { CategoryGroupsModule } from '../category-groups/category-groups.module';
 import { CategoriesModule } from '../categories/categories.module';
 import { CategoryBalancesModule } from '../category-balances/category-balances.module';
+import { ReadyToAssignModule } from '../ready-to-assign/ready-to-assign.module';
 
 @Module({
   controllers: [MainDataController],
@@ -17,7 +18,8 @@ import { CategoryBalancesModule } from '../category-balances/category-balances.m
     AccountsModule,
     CategoryGroupsModule,
     CategoriesModule,
-    CategoryBalancesModule
+    CategoryBalancesModule,
+    ReadyToAssignModule
   ],
 })
 export class MainDataModule {}

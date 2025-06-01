@@ -1,12 +1,16 @@
 import { Injectable } from '@nestjs/common';
 import { SupabaseService } from '../supabase/supabase.service';
-import { CreateCategoryDto, UpdateCategoryDto, CategoryResponse, ReorderCategoriesDto } from './dto/category.dto';
+import { CreateCategoryDto, UpdateCategoryDto, CategoryResponse, ReorderCategoriesDto, CategoryWithReadyToAssignResponse } from './dto/category.dto';
+import { ReadyToAssignService } from '../ready-to-assign/ready-to-assign.service';
 
 @Injectable()
 export class CategoriesService {
-  constructor(private readonly supabaseService: SupabaseService) {}
+  constructor(
+    private readonly supabaseService: SupabaseService,
+    private readonly readyToAssignService: ReadyToAssignService
+  ) {}
 
-  async create(createCategoryDto: CreateCategoryDto, userId: string, authToken: string): Promise<CategoryResponse> {
+  async create(createCategoryDto: CreateCategoryDto, userId: string, authToken: string): Promise<CategoryWithReadyToAssignResponse> {
     const supabase = this.supabaseService.getAuthenticatedClient(authToken);
 
     const payload = {
@@ -65,12 +69,24 @@ export class CategoriesService {
       throw new Error(balanceError.message);
     }
 
+    // Calculate updated Ready to Assign after category creation
+    const readyToAssign = await this.readyToAssignService.calculateReadyToAssign(
+      createCategoryDto.budget_id,
+      userId,
+      authToken
+    );
+
     // Return category with current month balances
-    return {
+    const category: CategoryResponse = {
       ...data,
       assigned: 0,
       activity: 0,
       available: 0
+    };
+
+    return {
+      category,
+      readyToAssign
     };
   }
 
@@ -165,7 +181,7 @@ export class CategoriesService {
     }));
   }
 
-  async update(id: string, updateCategoryDto: UpdateCategoryDto, userId: string, authToken: string, year?: number, month?: number, currentUserYear?: number, currentUserMonth?: number): Promise<CategoryResponse> {
+  async update(id: string, updateCategoryDto: UpdateCategoryDto, userId: string, authToken: string, year?: number, month?: number, currentUserYear?: number, currentUserMonth?: number): Promise<CategoryWithReadyToAssignResponse> {
     const supabase = this.supabaseService.getAuthenticatedClient(authToken);
 
     // Separate category fields from balance fields
@@ -310,12 +326,24 @@ export class CategoriesService {
       throw new Error(categoryError.message);
     }
 
+    // Calculate updated Ready to Assign after category update
+    const readyToAssign = await this.readyToAssignService.calculateReadyToAssign(
+      categoryData.budget_id,
+      userId,
+      authToken
+    );
+
     // Return category with default balance values (frontend will merge with actual balances)
-    return {
+    const category: CategoryResponse = {
       ...categoryData,
       assigned: 0,
       activity: 0,
       available: 0
+    };
+
+    return {
+      category,
+      readyToAssign
     };
   }
 

@@ -5,6 +5,7 @@ import { AccountsService } from '../accounts/accounts.service';
 import { CategoryGroupsService } from '../category-groups/category-groups.service';
 import { CategoriesService } from '../categories/categories.service';
 import { CategoryBalancesService } from '../category-balances/category-balances.service';
+import { ReadyToAssignService } from '../ready-to-assign/ready-to-assign.service';
 
 @Injectable()
 export class MainDataService {
@@ -13,16 +14,18 @@ export class MainDataService {
         private readonly accountsService: AccountsService,
         private readonly categoryGroupsService: CategoryGroupsService,
         private readonly categoriesService: CategoriesService,
-        private readonly categoryBalancesService: CategoryBalancesService
+        private readonly categoryBalancesService: CategoryBalancesService,
+        private readonly readyToAssignService: ReadyToAssignService
     ) {}
 
     async getMainData(budgetId: string, authToken: string, userId: string, year?: number, month?: number): Promise<MainDataResponse> {
-        const [budget, accounts, categoryGroups, categories, categoryBalances] = await Promise.all([
+        const [budget, accounts, categoryGroups, categories, categoryBalances, readyToAssign] = await Promise.all([
             this.budgetsService.findOne(budgetId, userId, authToken),
             this.accountsService.findAll(userId, authToken, budgetId),
             this.categoryGroupsService.findAll(budgetId, userId, authToken),
             this.categoriesService.findAllByBudgetWithoutBalances(budgetId, userId, authToken),
-            this.categoryBalancesService.findAllByBudget(budgetId, userId, authToken)
+            this.categoryBalancesService.findAllByBudget(budgetId, userId, authToken),
+            this.readyToAssignService.calculateReadyToAssign(budgetId, userId, authToken)
         ]);
 
         return {
@@ -30,7 +33,8 @@ export class MainDataService {
            accounts,
            categoryGroups,
            categories,
-           categoryBalances
+           categoryBalances,
+           readyToAssign
         }
     }
 }

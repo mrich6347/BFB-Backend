@@ -40,3 +40,8 @@ export class AccountResponse {
     working_balance: number;
     is_active: boolean;
 }
+
+export class AccountWithReadyToAssignResponse {
+    account: AccountResponse;
+    readyToAssign: number;
+}
