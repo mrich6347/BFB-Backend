@@ -44,12 +44,14 @@ export class CategoriesController {
   async update(
     @Param('id', new ParseUUIDPipe()) id: string,
     @Body() updateCategoryDto: UpdateCategoryDto,
-    @Query('year', new ParseIntPipe({ optional: true })) year: number,
-    @Query('month', new ParseIntPipe({ optional: true })) month: number,
-    @Req() req: any
+    @Req() req: any,
+    @Query('year', new ParseIntPipe({ optional: true })) year?: number,
+    @Query('month', new ParseIntPipe({ optional: true })) month?: number,
+    @Query('currentUserYear', new ParseIntPipe({ optional: true })) currentUserYear?: number,
+    @Query('currentUserMonth', new ParseIntPipe({ optional: true })) currentUserMonth?: number
   ): Promise<CategoryResponse> {
     const authToken = this.authService.getAuthToken(req);
-    return this.categoriesService.update(id, updateCategoryDto, req.user.id, authToken, year, month);
+    return this.categoriesService.update(id, updateCategoryDto, req.user.id, authToken, year, month, currentUserYear, currentUserMonth);
   }
 
   @Delete(':id')
