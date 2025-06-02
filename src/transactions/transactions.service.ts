@@ -55,7 +55,6 @@ export class TransactionsService {
   async findAllByBudget(budgetId: string, userId: string, authToken: string): Promise<TransactionResponse[]> {
     const supabase = this.supabaseService.getAuthenticatedClient(authToken);
 
-    console.log('Finding transactions for budget:', budgetId, 'user:', userId);
 
     // First get all account IDs for this budget
     const { data: accounts, error: accountsError } = await supabase
@@ -69,14 +68,12 @@ export class TransactionsService {
       throw new Error(accountsError.message);
     }
 
-    console.log('Found accounts:', accounts?.length || 0);
 
     if (!accounts || accounts.length === 0) {
       return [];
     }
 
     const accountIds = accounts.map(account => account.id);
-    console.log('Account IDs:', accountIds);
 
     // Then get all transactions for those accounts
     const { data, error } = await supabase
@@ -92,7 +89,6 @@ export class TransactionsService {
       throw new Error(error.message);
     }
 
-    console.log('Found transactions:', data?.length || 0);
     return data || [];
   }
 

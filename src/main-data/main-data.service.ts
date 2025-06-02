@@ -31,7 +31,6 @@ export class MainDataService {
             this.readyToAssignService.calculateReadyToAssign(budgetId, userId, authToken)
         ]);
 
-        console.log('Transactions found:', transactions?.length || 0);
 
         return {
            budget,
