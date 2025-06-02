@@ -11,6 +11,7 @@ import { CategoryGroupsModule } from './category-groups/category-groups.module';
 import { CategoriesModule } from './categories/categories.module';
 import { CategoryBalancesModule } from './category-balances/category-balances.module';
 import { DatabaseManagementModule } from './database-management/database-management.module';
+import { TransactionsModule } from './transactions/transactions.module';
 
 @Module({
   imports: [
@@ -23,7 +24,8 @@ import { DatabaseManagementModule } from './database-management/database-managem
     CategoryGroupsModule,
     CategoriesModule,
     CategoryBalancesModule,
-    DatabaseManagementModule
+    DatabaseManagementModule,
+    TransactionsModule
   ],
   controllers: [AppController],
   providers: [AppService],

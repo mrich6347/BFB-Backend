@@ -8,6 +8,7 @@ import { CategoryGroupsModule } from '../category-groups/category-groups.module'
 import { CategoriesModule } from '../categories/categories.module';
 import { CategoryBalancesModule } from '../category-balances/category-balances.module';
 import { ReadyToAssignModule } from '../ready-to-assign/ready-to-assign.module';
+import { TransactionsModule } from '../transactions/transactions.module';
 
 @Module({
   controllers: [MainDataController],
@@ -19,7 +20,8 @@ import { ReadyToAssignModule } from '../ready-to-assign/ready-to-assign.module';
     CategoryGroupsModule,
     CategoriesModule,
     CategoryBalancesModule,
-    ReadyToAssignModule
+    ReadyToAssignModule,
+    TransactionsModule
   ],
 })
 export class MainDataModule {}

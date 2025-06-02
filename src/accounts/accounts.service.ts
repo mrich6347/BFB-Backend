@@ -56,10 +56,27 @@ export class AccountsService {
     const supabase = this.supabaseService.getAuthenticatedClient(authToken);
 
     const { data, error } = await supabase
-      .from('accounts') 
+      .from('accounts')
       .select('id, name, account_type, budget_id, interest_rate, minimum_monthly_payment, cleared_balance, uncleared_balance, working_balance, is_active')
       .eq('user_id', userId)
       .eq('budget_id', budgetId);
+
+    if (error) {
+      throw new Error(error.message);
+    }
+
+    return data;
+  }
+
+  async findOne(id: string, userId: string, authToken: string): Promise<AccountResponse> {
+    const supabase = this.supabaseService.getAuthenticatedClient(authToken);
+
+    const { data, error } = await supabase
+      .from('accounts')
+      .select('id, name, account_type, budget_id, interest_rate, minimum_monthly_payment, cleared_balance, uncleared_balance, working_balance, is_active')
+      .eq('id', id)
+      .eq('user_id', userId)
+      .single();
 
     if (error) {
       throw new Error(error.message);
