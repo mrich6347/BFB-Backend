@@ -79,4 +79,17 @@ export class CategoriesController {
       authToken
     );
   }
+
+  @Post('move-money-to-ready-to-assign')
+  async moveMoneyToReadyToAssign(@Body() moveMoneyDto: Omit<MoveMoneyDto, 'destinationCategoryId'>, @Req() req: any): Promise<void> {
+    const authToken = this.authService.getAuthToken(req);
+    return this.categoriesService.moveMoneyToReadyToAssign(
+      moveMoneyDto.sourceCategoryId,
+      moveMoneyDto.amount,
+      moveMoneyDto.year,
+      moveMoneyDto.month,
+      req.user.id,
+      authToken
+    );
+  }
 }

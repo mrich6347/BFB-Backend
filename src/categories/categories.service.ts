@@ -612,4 +612,71 @@ export class CategoriesService {
       }
     }
   }
+
+  async moveMoneyToReadyToAssign(
+    sourceCategoryId: string,
+    amount: number,
+    year: number,
+    month: number,
+    userId: string,
+    authToken: string
+  ): Promise<void> {
+    const supabase = this.supabaseService.getAuthenticatedClient(authToken);
+
+    // Validate that the source category exists and belongs to the user
+    const { data: category, error: categoryError } = await supabase
+      .from('categories')
+      .select('id, budget_id')
+      .eq('id', sourceCategoryId)
+      .eq('user_id', userId)
+      .single();
+
+    if (categoryError) {
+      throw new Error(categoryError.message);
+    }
+
+    if (!category) {
+      throw new Error('Source category not found');
+    }
+
+    // Get current balance for the source category
+    const { data: balance, error: balanceError } = await supabase
+      .from('category_balances')
+      .select('available, assigned')
+      .eq('category_id', sourceCategoryId)
+      .eq('user_id', userId)
+      .eq('year', year)
+      .eq('month', month)
+      .single();
+
+    if (balanceError) {
+      throw new Error(balanceError.message);
+    }
+
+    if (!balance) {
+      throw new Error('Source category balance not found for the specified month');
+    }
+
+    // Validate that source has enough available money
+    if ((balance.available || 0) < amount) {
+      throw new Error('Insufficient available balance in source category');
+    }
+
+    // Update source category balance (subtract amount from both available and assigned)
+    // This effectively moves the money back to Ready to Assign by "un-assigning" it
+    const { error: updateError } = await supabase
+      .from('category_balances')
+      .update({
+        available: (balance.available || 0) - amount,
+        assigned: (balance.assigned || 0) - amount
+      })
+      .eq('category_id', sourceCategoryId)
+      .eq('user_id', userId)
+      .eq('year', year)
+      .eq('month', month);
+
+    if (updateError) {
+      throw new Error(updateError.message);
+    }
+  }
 }
