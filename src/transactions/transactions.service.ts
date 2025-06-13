@@ -344,11 +344,10 @@ export class TransactionsService {
 
   /**
    * Helper method to update category activity for a transaction
-   * Handles both inflows (positive amounts) and outflows (negative amounts)
-   *
-   * Logic:
-   * - Activity: Always add the transaction amount (positive for inflows, negative for outflows)
-   * - Available: Always add the transaction amount (increases for inflows, decreases for outflows)
+   * New logic:
+   * - Activity: Update for the transaction's actual month (historical accuracy)
+   * - Available: Always update current month (where user can manage the impact)
+   * - Date validation: Allow past transactions but not future ones
    */
   private async updateCategoryActivity(
     categoryId: string,
@@ -358,12 +357,61 @@ export class TransactionsService {
     userId: string,
     authToken: string
   ): Promise<void> {
-    // Extract year and month from transaction date
-    const date = new Date(transactionDate);
-    const year = date.getFullYear();
-    const month = date.getMonth() + 1; // JavaScript months are 0-indexed
+    // Validate transaction date - no future transactions allowed
+    const transactionDateObj = new Date(transactionDate);
+    const today = new Date();
+    today.setHours(23, 59, 59, 999); // End of today
 
-    // Get existing category balance for this month
+    if (transactionDateObj > today) {
+      throw new Error('Future transactions are not allowed');
+    }
+
+    // Extract year and month from transaction date for activity tracking
+    const transactionYear = transactionDateObj.getFullYear();
+    const transactionMonth = transactionDateObj.getMonth() + 1;
+
+    // Get current year and month for available balance updates
+    const currentDate = new Date();
+    const currentYear = currentDate.getFullYear();
+    const currentMonth = currentDate.getMonth() + 1;
+
+    // Update activity for the transaction's actual month
+    await this.updateActivityForMonth(
+      categoryId,
+      budgetId,
+      transactionYear,
+      transactionMonth,
+      amount,
+      userId,
+      authToken
+    );
+
+    // Update available balance for current month (only if different from transaction month)
+    if (transactionYear !== currentYear || transactionMonth !== currentMonth) {
+      await this.updateAvailableForCurrentMonth(
+        categoryId,
+        budgetId,
+        currentYear,
+        currentMonth,
+        amount,
+        userId,
+        authToken
+      );
+    }
+  }
+
+  /**
+   * Update activity for a specific month (transaction's actual month)
+   */
+  private async updateActivityForMonth(
+    categoryId: string,
+    budgetId: string,
+    year: number,
+    month: number,
+    amount: number,
+    userId: string,
+    authToken: string
+  ): Promise<void> {
     const existingBalance = await this.categoryBalancesService.findByCategory(
       categoryId,
       year,
@@ -373,36 +421,103 @@ export class TransactionsService {
     );
 
     if (existingBalance) {
-      // Update existing balance
-      // Activity always increases by the amount (tracks all transaction activity)
+      // Update existing balance - only update activity
       const newActivity = (existingBalance.activity || 0) + amount;
 
-      // Available changes in the same direction as the amount:
-      // - For outflows (negative amount): available decreases (spending reduces available money)
-      // - For inflows (positive amount): available increases (income increases available money)
-      const newAvailable = (existingBalance.available || 0) + amount;
+      // For current month transactions, also update available
+      const currentDate = new Date();
+      const currentYear = currentDate.getFullYear();
+      const currentMonth = currentDate.getMonth() + 1;
+
+      const updateData: any = { activity: newActivity };
+
+      if (year === currentYear && month === currentMonth) {
+        // Current month transaction - update both activity and available
+        updateData.available = (existingBalance.available || 0) + amount;
+      }
 
       await this.categoryBalancesService.updateByCategoryAndMonth(
         categoryId,
         year,
         month,
-        {
-          activity: newActivity,
-          available: newAvailable
-        },
+        updateData,
         userId,
         authToken
       );
     } else {
-      // Create new balance record with the activity
+      // Create new balance record for the transaction month
+      const currentDate = new Date();
+      const currentYear = currentDate.getFullYear();
+      const currentMonth = currentDate.getMonth() + 1;
+
+      const balanceData: any = {
+        activity: amount,
+        assigned: 0
+      };
+
+      if (year === currentYear && month === currentMonth) {
+        // Current month transaction - set available
+        balanceData.available = amount;
+      } else {
+        // Past month transaction - don't affect available in past month
+        balanceData.available = 0;
+      }
+
       await this.categoryBalancesService.createOrUpdateByCategoryAndMonth(
         categoryId,
         budgetId,
         year,
         month,
+        balanceData,
+        userId,
+        authToken
+      );
+    }
+  }
+
+  /**
+   * Update available balance for current month (for past transactions)
+   */
+  private async updateAvailableForCurrentMonth(
+    categoryId: string,
+    budgetId: string,
+    currentYear: number,
+    currentMonth: number,
+    amount: number,
+    userId: string,
+    authToken: string
+  ): Promise<void> {
+    const existingBalance = await this.categoryBalancesService.findByCategory(
+      categoryId,
+      currentYear,
+      currentMonth,
+      userId,
+      authToken
+    );
+
+    if (existingBalance) {
+      // Update existing current month balance - only update available
+      const newAvailable = (existingBalance.available || 0) + amount;
+
+      await this.categoryBalancesService.updateByCategoryAndMonth(
+        categoryId,
+        currentYear,
+        currentMonth,
+        { available: newAvailable },
+        userId,
+        authToken
+      );
+    } else {
+      // Create new current month balance with only available affected
+      await this.categoryBalancesService.createOrUpdateByCategoryAndMonth(
+        categoryId,
+        budgetId,
+        currentYear,
+        currentMonth,
         {
-          activity: amount, // Activity is the transaction amount (positive or negative)
-          available: amount // Available changes in same direction as amount
+          assigned: 0,
+          activity: 0,
+          available: amount // Only available is affected for past transactions
         },
         userId,
         authToken
