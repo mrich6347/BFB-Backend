@@ -28,40 +28,26 @@ export class CategoriesService {
       throw new Error(error.message);
     }
 
-    // Create initial category balances for current month and next month
+    // Create initial category balance for current month only
     // (only for manually created categories, not default ones from trigger)
     const now = new Date();
     const currentYear = now.getFullYear();
     const currentMonth = now.getMonth() + 1;
-    const nextMonth = currentMonth === 12 ? 1 : currentMonth + 1;
-    const nextYear = currentMonth === 12 ? currentYear + 1 : currentYear;
 
-    const balancePayloads = [
-      {
-        category_id: data.id,
-        budget_id: createCategoryDto.budget_id,
-        user_id: userId,
-        year: currentYear,
-        month: currentMonth,
-        assigned: 0,
-        activity: 0,
-        available: 0
-      },
-      {
-        category_id: data.id,
-        budget_id: createCategoryDto.budget_id,
-        user_id: userId,
-        year: nextYear,
-        month: nextMonth,
-        assigned: 0,
-        activity: 0,
-        available: 0
-      }
-    ];
+    const balancePayload = {
+      category_id: data.id,
+      budget_id: createCategoryDto.budget_id,
+      user_id: userId,
+      year: currentYear,
+      month: currentMonth,
+      assigned: 0,
+      activity: 0,
+      available: 0
+    };
 
     const { error: balanceError } = await supabase
       .from('category_balances')
-      .insert(balancePayloads);
+      .insert([balancePayload]);
 
     if (balanceError) {
       // If balance creation fails, clean up the category
