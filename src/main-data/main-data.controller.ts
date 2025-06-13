@@ -12,11 +12,9 @@ export class MainDataController {
   @Get(':budgetId')
   async getMainData(
     @Req() req: any,
-    @Param('budgetId') budgetId: string,
-    @Query('year', new ParseIntPipe({ optional: true })) year: number,
-    @Query('month', new ParseIntPipe({ optional: true })) month: number
+    @Param('budgetId') budgetId: string
   ): Promise<MainDataResponse> {
     const authToken = this.authService.getAuthToken(req);
-    return this.mainDataService.getMainData(budgetId, authToken, req.user.id, year, month);
+    return this.mainDataService.getMainData(budgetId, authToken, req.user.id);
   }
 }

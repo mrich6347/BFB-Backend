@@ -20,13 +20,16 @@ export class MainDataService {
         private readonly transactionsService: TransactionsService
     ) {}
 
-    async getMainData(budgetId: string, authToken: string, userId: string, year?: number, month?: number): Promise<MainDataResponse> {
+    async getMainData(budgetId: string, authToken: string, userId: string): Promise<MainDataResponse> {
+        // First, check if we need to roll over to current month
+        await this.checkAndHandleMonthRollover(budgetId, userId, authToken);
+
         const [budget, accounts, categoryGroups, categories, categoryBalances, transactions, readyToAssign] = await Promise.all([
             this.budgetsService.findOne(budgetId, userId, authToken),
             this.accountsService.findAll(userId, authToken, budgetId),
             this.categoryGroupsService.findAll(budgetId, userId, authToken),
             this.categoriesService.findAllByBudgetWithoutBalances(budgetId, userId, authToken),
-            this.categoryBalancesService.findAllByBudget(budgetId, userId, authToken),
+            this.categoryBalancesService.findAllByBudget(budgetId, userId, authToken), // Now only returns current month
             this.transactionsService.findAllByBudget(budgetId, userId, authToken),
             this.readyToAssignService.calculateReadyToAssign(budgetId, userId, authToken)
         ]);
@@ -40,6 +43,71 @@ export class MainDataService {
            categoryBalances,
            transactions,
            readyToAssign
+        }
+    }
+
+    private async checkAndHandleMonthRollover(budgetId: string, userId: string, authToken: string): Promise<void> {
+        const now = new Date();
+        const currentYear = now.getFullYear();
+        const currentMonth = now.getMonth() + 1;
+
+        // Check if current month balances exist
+        const currentMonthBalances = await this.categoryBalancesService.findByBudgetAndMonth(
+            budgetId,
+            currentYear,
+            currentMonth,
+            userId,
+            authToken
+        );
+
+        // If current month balances don't exist, we need to roll over from previous month
+        if (!currentMonthBalances || currentMonthBalances.length === 0) {
+            await this.rolloverToPreviousMonth(budgetId, userId, authToken, currentYear, currentMonth);
+        }
+    }
+
+    private async rolloverToPreviousMonth(budgetId: string, userId: string, authToken: string, currentYear: number, currentMonth: number): Promise<void> {
+        // Calculate previous month
+        let prevYear = currentYear;
+        let prevMonth = currentMonth - 1;
+
+        if (prevMonth === 0) {
+            prevMonth = 12;
+            prevYear -= 1;
+        }
+
+        // Get previous month balances
+        const previousMonthBalances = await this.categoryBalancesService.findByBudgetAndMonth(
+            budgetId,
+            prevYear,
+            prevMonth,
+            userId,
+            authToken
+        );
+
+        // Get all categories for this budget
+        const categories = await this.categoriesService.findAllByBudgetWithoutBalances(budgetId, userId, authToken);
+
+        // Create current month balances
+        const newBalances = categories.map(category => {
+            // Find previous month balance for this category
+            const prevBalance = previousMonthBalances.find(b => b.category_id === category.id);
+
+            return {
+                category_id: category.id,
+                budget_id: budgetId,
+                user_id: userId,
+                year: currentYear,
+                month: currentMonth,
+                assigned: 0, // Reset assigned to 0
+                activity: 0, // Reset activity to 0
+                available: prevBalance?.available || 0 // Carry over available balance (positive or negative)
+            };
+        });
+
+        // Insert new balances if there are any
+        if (newBalances.length > 0) {
+            await this.categoryBalancesService.createMultiple(newBalances, authToken);
         }
     }
 }

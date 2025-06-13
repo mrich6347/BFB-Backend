@@ -70,13 +70,18 @@ export class CategoryBalancesService {
   async findAllByBudget(budgetId: string, userId: string, authToken: string): Promise<CategoryBalanceResponse[]> {
     const supabase = this.supabaseService.getAuthenticatedClient(authToken);
 
+    // Only return current month balances
+    const now = new Date();
+    const currentYear = now.getFullYear();
+    const currentMonth = now.getMonth() + 1;
+
     const { data, error } = await supabase
       .from('category_balances')
       .select('*')
       .eq('budget_id', budgetId)
       .eq('user_id', userId)
-      .order('year', { ascending: true })
-      .order('month', { ascending: true });
+      .eq('year', currentYear)
+      .eq('month', currentMonth);
 
     if (error) {
       throw new Error(error.message);
@@ -192,7 +197,7 @@ export class CategoryBalancesService {
 
   async ensureBalancesExistForMonth(budgetId: string, year: number, month: number, userId: string, authToken: string): Promise<void> {
     const supabase = this.supabaseService.getAuthenticatedClient(authToken);
-    
+
     // Get all categories for this budget
     const { data: categories, error: categoriesError } = await supabase
       .from('categories')
@@ -244,6 +249,18 @@ export class CategoryBalancesService {
       if (insertError) {
         throw new Error(insertError.message);
       }
+    }
+  }
+
+  async createMultiple(balances: any[], authToken: string): Promise<void> {
+    const supabase = this.supabaseService.getAuthenticatedClient(authToken);
+
+    const { error } = await supabase
+      .from('category_balances')
+      .insert(balances);
+
+    if (error) {
+      throw new Error(error.message);
     }
   }
 }

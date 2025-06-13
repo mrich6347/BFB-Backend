@@ -181,7 +181,7 @@ export class CategoriesService {
     }));
   }
 
-  async update(id: string, updateCategoryDto: UpdateCategoryDto, userId: string, authToken: string, year?: number, month?: number, currentUserYear?: number, currentUserMonth?: number): Promise<CategoryWithReadyToAssignResponse> {
+  async update(id: string, updateCategoryDto: UpdateCategoryDto, userId: string, authToken: string, year?: number, month?: number): Promise<CategoryWithReadyToAssignResponse> {
     const supabase = this.supabaseService.getAuthenticatedClient(authToken);
 
     // Separate category fields from balance fields
@@ -240,20 +240,7 @@ export class CategoriesService {
 
         balanceUpdate.assigned = assigned;
 
-        // YNAB Logic: Update available balances for all future months
-        if (assignedDifference !== 0) {
-          // Get category data for budget_id
-          const { data: categoryData } = await supabase
-            .from('categories')
-            .select('budget_id')
-            .eq('id', id)
-            .eq('user_id', userId)
-            .single();
-
-          if (categoryData) {
-            await this.updateFutureMonthsAvailable(supabase, id, categoryData.budget_id, userId, targetYear, targetMonth, assignedDifference, currentUserYear, currentUserMonth);
-          }
-        }
+        // Simplified: Only update current month (no future month cascading)
       }
 
       if (activity !== undefined) balanceUpdate.activity = activity;
@@ -515,103 +502,7 @@ export class CategoriesService {
     }
   }
 
-  // Helper method to update available balances for all future months (YNAB logic)
-  private async updateFutureMonthsAvailable(
-    supabase: any,
-    categoryId: string,
-    budgetId: string,
-    userId: string,
-    fromYear: number,
-    fromMonth: number,
-    difference: number,
-    currentUserYear?: number,
-    currentUserMonth?: number
-  ) {
-    // Calculate all future months up to 2 months from current user month
-    // If user month not provided, fall back to server time
-    const now = new Date();
-    const currentRealYear = currentUserYear || now.getFullYear();
-    const currentRealMonth = currentUserMonth || (now.getMonth() + 1);
 
-    const futureMonths: { year: number; month: number }[] = [];
-    let checkYear = fromYear;
-    let checkMonth = fromMonth + 1;
-
-    // Calculate the maximum month we should update (2 months from user's current month)
-    let maxYear = currentRealYear;
-    let maxMonth = currentRealMonth + 2;
-    if (maxMonth > 12) {
-      maxMonth = maxMonth - 12;
-      maxYear += 1;
-    }
-
-    // Generate list of future months to check/create
-    // Go from the assignment month forward until we reach the 2-month limit from user's current month
-    while (true) {
-      if (checkMonth > 12) {
-        checkMonth = 1;
-        checkYear += 1;
-      }
-
-      // Check if we've reached the maximum month (2 months from user's current month)
-      if (checkYear > maxYear || (checkYear === maxYear && checkMonth > maxMonth)) {
-        break;
-      }
-
-      futureMonths.push({ year: checkYear, month: checkMonth });
-      checkMonth += 1;
-    }
-
-    // For each future month, either update existing balance or create new one
-    for (const { year, month } of futureMonths) {
-      // Check if balance exists for this month
-      const { data: existingBalance, error: checkError } = await supabase
-        .from('category_balances')
-        .select('*')
-        .eq('category_id', categoryId)
-        .eq('budget_id', budgetId)
-        .eq('user_id', userId)
-        .eq('year', year)
-        .eq('month', month)
-        .single();
-
-      if (checkError && checkError.code !== 'PGRST116') {
-        throw new Error(checkError.message);
-      }
-
-      if (existingBalance) {
-        // Update existing balance
-        const { error: updateError } = await supabase
-          .from('category_balances')
-          .update({
-            available: (existingBalance.available || 0) + difference
-          })
-          .eq('id', existingBalance.id);
-
-        if (updateError) {
-          throw new Error(updateError.message);
-        }
-      } else {
-        // Create new balance record with the difference as available
-        const { error: createError } = await supabase
-          .from('category_balances')
-          .insert({
-            category_id: categoryId,
-            budget_id: budgetId,
-            user_id: userId,
-            year,
-            month,
-            assigned: 0,
-            activity: 0,
-            available: difference
-          });
-
-        if (createError) {
-          throw new Error(createError.message);
-        }
-      }
-    }
-  }
 
   async moveMoneyToReadyToAssign(
     sourceCategoryId: string,

@@ -46,12 +46,10 @@ export class CategoriesController {
     @Body() updateCategoryDto: UpdateCategoryDto,
     @Req() req: any,
     @Query('year', new ParseIntPipe({ optional: true })) year?: number,
-    @Query('month', new ParseIntPipe({ optional: true })) month?: number,
-    @Query('currentUserYear', new ParseIntPipe({ optional: true })) currentUserYear?: number,
-    @Query('currentUserMonth', new ParseIntPipe({ optional: true })) currentUserMonth?: number
+    @Query('month', new ParseIntPipe({ optional: true })) month?: number
   ): Promise<CategoryWithReadyToAssignResponse> {
     const authToken = this.authService.getAuthToken(req);
-    return this.categoriesService.update(id, updateCategoryDto, req.user.id, authToken, year, month, currentUserYear, currentUserMonth);
+    return this.categoriesService.update(id, updateCategoryDto, req.user.id, authToken, year, month);
   }
 
   @Delete(':id')
