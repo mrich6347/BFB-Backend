@@ -72,6 +72,25 @@ export class MoveMoneyDto {
   month: number;
 }
 
+export class PullFromReadyToAssignDto {
+  @IsString()
+  @IsUUID()
+  @IsNotEmpty()
+  destinationCategoryId: string;
+
+  @IsNumber()
+  @IsNotEmpty()
+  amount: number;
+
+  @IsInt()
+  @IsNotEmpty()
+  year: number;
+
+  @IsInt()
+  @IsNotEmpty()
+  month: number;
+}
+
 export class CategoryResponse {
   id: string;
   name: string;

@@ -556,4 +556,91 @@ export class CategoriesService {
       throw new Error(updateError.message);
     }
   }
+
+  async pullFromReadyToAssign(
+    destinationCategoryId: string,
+    amount: number,
+    year: number,
+    month: number,
+    userId: string,
+    authToken: string
+  ): Promise<void> {
+    const supabase = this.supabaseService.getAuthenticatedClient(authToken);
+
+    // Validate that the destination category exists and belongs to the user
+    const { data: category, error: categoryError } = await supabase
+      .from('categories')
+      .select('id, budget_id')
+      .eq('id', destinationCategoryId)
+      .eq('user_id', userId)
+      .single();
+
+    if (categoryError) {
+      throw new Error(categoryError.message);
+    }
+
+    if (!category) {
+      throw new Error('Destination category not found');
+    }
+
+    // Calculate current Ready to Assign to validate we have enough
+    const currentReadyToAssign = await this.readyToAssignService.calculateReadyToAssign(
+      category.budget_id,
+      userId,
+      authToken
+    );
+
+    if (currentReadyToAssign < amount) {
+      throw new Error('Insufficient Ready to Assign balance');
+    }
+
+    // Get or create the destination category balance for the specified month
+    let { data: balance, error: balanceError } = await supabase
+      .from('category_balances')
+      .select('id, assigned, available')
+      .eq('category_id', destinationCategoryId)
+      .eq('user_id', userId)
+      .eq('year', year)
+      .eq('month', month)
+      .single();
+
+    if (balanceError && balanceError.code !== 'PGRST116') {
+      throw new Error(balanceError.message);
+    }
+
+    if (!balance) {
+      // Create new balance record
+      const { data: newBalance, error: createError } = await supabase
+        .from('category_balances')
+        .insert({
+          category_id: destinationCategoryId,
+          budget_id: category.budget_id,
+          user_id: userId,
+          year,
+          month,
+          assigned: amount,
+          activity: 0,
+          available: amount
+        })
+        .select('id, assigned, available')
+        .single();
+
+      if (createError) {
+        throw new Error(createError.message);
+      }
+    } else {
+      // Update existing balance record
+      const { error: updateError } = await supabase
+        .from('category_balances')
+        .update({
+          assigned: (balance.assigned || 0) + amount,
+          available: (balance.available || 0) + amount
+        })
+        .eq('id', balance.id);
+
+      if (updateError) {
+        throw new Error(updateError.message);
+      }
+    }
+  }
 }
