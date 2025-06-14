@@ -580,21 +580,31 @@ export class TransactionsService {
     }
   }
 
+  async markTransactionsAsReconciled(accountId: string, userId: string, authToken: string): Promise<void> {
+    const supabase = this.supabaseService.getAuthenticatedClient(authToken);
+
+    // Mark all cleared transactions for this account as reconciled
+    const { error } = await supabase
+      .from('transactions')
+      .update({ is_reconciled: true })
+      .eq('account_id', accountId)
+      .eq('user_id', userId)
+      .eq('is_cleared', true)
+      .eq('is_reconciled', false); // Only update transactions that aren't already reconciled
+
+    if (error) {
+      throw new Error(error.message);
+    }
+  }
+
   /**
    * Update account balances based on current transactions
+   * Logic: Don't try to reverse-engineer the initial balance.
+   * Just calculate the balances based on the current working balance and transactions.
    */
   private async updateAccountBalances(accountId: string, userId: string, authToken: string): Promise<void> {
     console.log(`🔄 Updating account balances for account: ${accountId}`);
     const supabase = this.supabaseService.getAuthenticatedClient(authToken);
-
-    // We need to get the initial account balance. The approach is:
-    // 1. Get the account when it was first created (this is stored in cleared_balance initially)
-    // 2. Calculate the sum of all transactions
-    // 3. Update balances accordingly
-
-    // First, let's get the account creation balance by checking if there are any transactions
-    // If no transactions exist, the current cleared_balance is the initial balance
-    // If transactions exist, we need to reverse-calculate the initial balance
 
     // Get all transactions for this account
     const { data: transactions, error: transactionsError } = await supabase
@@ -607,10 +617,10 @@ export class TransactionsService {
       throw new Error(transactionsError.message);
     }
 
-    // Get current account data
+    // Get current account working balance (this should remain constant unless reconciled)
     const { data: account, error: accountError } = await supabase
       .from('accounts')
-      .select('cleared_balance, uncleared_balance, working_balance')
+      .select('working_balance')
       .eq('id', accountId)
       .eq('user_id', userId)
       .single();
@@ -624,45 +634,29 @@ export class TransactionsService {
     let unclearedTransactionTotal = 0;
 
     for (const transaction of transactions) {
+      const amount = parseFloat(transaction.amount.toString());
       if (transaction.is_cleared) {
-        clearedTransactionTotal += transaction.amount;
+        clearedTransactionTotal += amount;
       } else {
-        unclearedTransactionTotal += transaction.amount;
+        unclearedTransactionTotal += amount;
       }
     }
 
-    // Calculate the initial balance by working backwards from current state
-    // If this is the first time we're calculating, we assume the current cleared_balance
-    // minus any cleared transactions is the initial balance
-    let initialBalance: number;
+    // The working balance should be the sum of all transactions plus the initial balance
+    // So: initial_balance = working_balance - all_transactions
+    const currentWorkingBalance = parseFloat(account.working_balance.toString());
+    const totalTransactions = clearedTransactionTotal + unclearedTransactionTotal;
+    const initialBalance = currentWorkingBalance - totalTransactions;
 
-    if (transactions.length === 0) {
-      // No transactions, so current cleared_balance is the initial balance
-      initialBalance = parseFloat(account.cleared_balance.toString());
-    } else {
-      // Calculate initial balance: current_cleared_balance - cleared_transactions
-      // But only if this looks like it hasn't been properly calculated before
-      const currentClearedBalance = parseFloat(account.cleared_balance.toString());
-      const currentUnclearedBalance = parseFloat(account.uncleared_balance.toString());
-
-      // If uncleared_balance is 0 and we have uncleared transactions, this account hasn't been updated properly
-      if (currentUnclearedBalance === 0 && unclearedTransactionTotal !== 0) {
-        // This account needs to be recalculated from scratch
-        // Assume the current cleared_balance is the initial balance
-        initialBalance = currentClearedBalance;
-      } else {
-        // Account seems to be properly maintained, calculate initial balance
-        initialBalance = currentClearedBalance - clearedTransactionTotal;
-      }
-    }
-
-    // Now calculate the correct balances
+    // Calculate the correct balances
     const newClearedBalance = initialBalance + clearedTransactionTotal;
     const newUnclearedBalance = unclearedTransactionTotal;
     const newWorkingBalance = newClearedBalance + newUnclearedBalance;
 
     console.log(`💰 Account balance calculation:`, {
       accountId,
+      currentWorkingBalance,
+      totalTransactions,
       initialBalance,
       clearedTransactionTotal,
       unclearedTransactionTotal,
@@ -689,4 +683,6 @@ export class TransactionsService {
 
     console.log(`✅ Successfully updated account balances for account: ${accountId}`);
   }
+
+
 }

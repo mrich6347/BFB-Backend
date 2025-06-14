@@ -45,3 +45,14 @@ export class AccountWithReadyToAssignResponse {
     account: AccountResponse;
     readyToAssign: number;
 }
+
+export class ReconcileAccountDto {
+    @IsNumber()
+    actual_balance: number;
+}
+
+export class ReconcileAccountResponse {
+    account: AccountResponse;
+    adjustmentTransaction?: any; // TransactionResponse type from transactions module
+    readyToAssign: number;
+}
