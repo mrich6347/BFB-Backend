@@ -270,7 +270,7 @@ export class AccountsService {
         account_id: accountId,
         date: new Date().toISOString().split('T')[0], // Today's date
         amount: adjustmentAmount,
-        memo: memo || `Balance updated to ${newBalance.toFixed(2)}`,
+        memo: memo || 'Balance update',
         payee: 'Balance Update',
         category_id: undefined, // This will be treated as "Ready to Assign" but won't affect it for tracking accounts
         is_cleared: true,
@@ -331,31 +331,57 @@ export class AccountsService {
       throw new Error(error.message);
     }
 
-    // Calculate balance history points
+    // For tracking accounts, we need to reconstruct the balance at each point
+    // by working backwards from the current balance
     const balanceHistory: any[] = [];
 
-    // Add starting balance point (account creation)
-    balanceHistory.push({
-      date: transactions && transactions.length > 0 ? transactions[0].date : new Date().toISOString().split('T')[0],
-      balance: account.account_balance || 0,
-      memo: 'Starting balance',
-      transaction_id: null
-    });
-
-    // Add points for each transaction (showing balance after each transaction)
-    let runningBalance = account.account_balance || 0;
-    for (const transaction of transactions || []) {
-      runningBalance += transaction.amount || 0;
+    if (!transactions || transactions.length === 0) {
+      // No transactions, just show current balance
       balanceHistory.push({
-        date: transaction.date,
-        balance: runningBalance,
-        memo: transaction.memo || transaction.payee || 'Balance update',
-        transaction_id: transaction.id
+        date: new Date().toISOString().split('T')[0],
+        balance: account.working_balance,
+        memo: 'Starting balance',
+        transaction_id: null
+      });
+    } else {
+      // Work backwards from current balance to reconstruct history
+      let currentBalance = account.working_balance;
+
+      // Add current balance as the most recent point
+      const lastTransaction = transactions[transactions.length - 1];
+      balanceHistory.push({
+        date: lastTransaction.date,
+        balance: currentBalance,
+        memo: lastTransaction.memo || lastTransaction.payee || 'Balance update',
+        transaction_id: lastTransaction.id
+      });
+
+      // Work backwards through transactions to reconstruct previous balances
+      for (let i = transactions.length - 2; i >= 0; i--) {
+        const transaction = transactions[i + 1]; // The transaction that brought us to currentBalance
+        currentBalance -= transaction.amount || 0; // Subtract to get previous balance
+
+        balanceHistory.push({
+          date: transactions[i].date,
+          balance: currentBalance,
+          memo: transactions[i].memo || transactions[i].payee || 'Balance update',
+          transaction_id: transactions[i].id
+        });
+      }
+
+      // Add starting balance (before first transaction)
+      const firstTransaction = transactions[0];
+      currentBalance -= firstTransaction.amount || 0;
+      balanceHistory.push({
+        date: firstTransaction.date,
+        balance: currentBalance,
+        memo: 'Starting balance',
+        transaction_id: null
       });
     }
 
-    // Return newest first for the list, but chart will sort chronologically
-    return balanceHistory.reverse();
+    // Return newest first (already in reverse chronological order)
+    return balanceHistory;
   }
 
   async reconcileAccount(accountId: string, reconcileDto: ReconcileAccountDto, userId: string, authToken: string): Promise<ReconcileAccountResponse> {
