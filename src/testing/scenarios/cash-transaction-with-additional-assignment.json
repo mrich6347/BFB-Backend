@@ -1,0 +1,81 @@
+{
+  "name": "Cash Transaction with Post-Transaction Assignment Test",
+  "description": "Create budget, cash account, category, do transaction without initial assignment, then assign $50 and verify final state",
+  "steps": [
+    {
+      "action": "create_budget",
+      "description": "Create test budget",
+      "params": {
+        "name": "Test Budget",
+        "currency": "USD",
+        "currency_placement": "BEFORE",
+        "date_format": "US_SLASH",
+        "number_format": "DOT_COMMA"
+      }
+    },
+    {
+      "action": "create_account",
+      "description": "Create checking account with $1000",
+      "params": {
+        "name": "Checking",
+        "account_type": "CASH",
+        "account_balance": 1000
+      }
+    },
+    {
+      "action": "create_category_group",
+      "description": "Create category group",
+      "params": {
+        "name": "Monthly Expenses"
+      }
+    },
+    {
+      "action": "create_category",
+      "description": "Create groceries category",
+      "params": {
+        "name": "Groceries",
+        "category_group_name": "Monthly Expenses"
+      }
+    },
+    {
+      "action": "create_transaction",
+      "description": "Spend $50 on groceries without prior assignment",
+      "params": {
+        "account_name": "Checking",
+        "payee": "Store",
+        "category_name": "Groceries",
+        "amount": -50,
+        "date": "2025-06-14"
+      }
+    },
+    {
+      "action": "assign_money",
+      "description": "Assign $50 to groceries to cover the overspending",
+      "params": {
+        "category_name": "Groceries",
+        "amount": 50
+      }
+    }
+  ],
+  "expectedFinalState": {
+    "readyToAssign": 950,
+    "accounts": {
+      "Checking": {
+        "working_balance": 950
+      }
+    },
+    "categories": {
+      "Groceries": {
+        "assigned": 50,
+        "activity": -50,
+        "available": 0
+      }
+    }
+  },
+  "ynabBehaviorNotes": [
+    "Transaction creates overspending: assigned=0, activity=-50, available=-50",
+    "Assigning $50 covers the overspending: assigned=50, activity=-50, available=0",
+    "Ready to Assign decreases by assignment amount: $1000 - $50 = $950",
+    "Account working balance reflects the transaction: $1000 - $50 = $950"
+  ]
+}

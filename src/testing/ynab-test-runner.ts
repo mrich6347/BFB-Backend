@@ -252,13 +252,34 @@ export class YnabTestRunner {
   }
 
   private async assignMoney(params: any): Promise<StepResult> {
-    const categoryId = this.testData.categories[params.category_name];
-    const response = await request(this.app.getHttpServer())
-      .patch(`/categories/${categoryId}/pull-from-ready-to-assign`)
-      .set('Authorization', `Bearer ${this.authToken}`)
-      .send({ amount: params.amount });
+    // Find category ID by name from the current state (same approach as createTransaction)
+    let categoryId = null;
+    if (params.category_name) {
+      const currentState = await this.getCurrentState();
+      const category = currentState.categories.find(c => c.name === params.category_name);
+      if (category) {
+        categoryId = category.id;
+      } else {
+        return { success: false, error: `Category '${params.category_name}' not found` };
+      }
+    }
 
-    if (response.status === 200) {
+    // Use current month for the assignment
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = now.getMonth() + 1;
+
+    const response = await request(this.app.getHttpServer())
+      .post('/categories/pull-from-ready-to-assign')
+      .set('Authorization', `Bearer ${this.authToken}`)
+      .send({
+        destinationCategoryId: categoryId,
+        amount: params.amount,
+        year: year,
+        month: month
+      });
+
+    if (response.status === 201) {
       return { success: true, data: response.body };
     }
     return { success: false, error: response.body.message || 'Failed to assign money' };
@@ -302,11 +323,21 @@ export class YnabTestRunner {
 
     // Compare categories
     for (const [categoryName, expectedCategory] of Object.entries(expected.categories)) {
-      const actualCategory = actual.categoryBalances.find(c => 
-        actual.categories.find(cat => cat.id === c.category_id)?.name === categoryName
-      );
+      // Find all categories with this name
+      const matchingCategories = actual.categories.filter(cat => cat.name === categoryName);
+
+      // Find the category balance for each matching category
+      let actualCategory = null;
+      for (const cat of matchingCategories) {
+        const balance = actual.categoryBalances.find(c => c.category_id === cat.id);
+        if (balance) {
+          actualCategory = balance;
+          break; // Use the first one that has a balance record
+        }
+      }
+
       if (!actualCategory) {
-        errors.push(`Category '${categoryName}' not found`);
+        errors.push(`Category '${categoryName}' not found in categoryBalances`);
         continue;
       }
 
