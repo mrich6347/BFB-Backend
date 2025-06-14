@@ -13,7 +13,8 @@ export interface TestScenario {
 
 export interface TestStep {
   action: 'create_budget' | 'create_account' | 'create_category_group' | 'create_category' |
-          'create_transaction' | 'delete_transaction' | 'update_transaction' | 'delete_category' | 'assign_money' | 'get_state';
+          'create_transaction' | 'delete_transaction' | 'update_transaction' | 'delete_category' |
+          'assign_money' | 'move_money_to_ready_to_assign' | 'get_state';
   description: string;
   params: any;
   expectedResult?: any;
@@ -129,6 +130,8 @@ export class YnabTestRunner {
           return await this.deleteCategory(step.params);
         case 'assign_money':
           return await this.assignMoney(step.params);
+        case 'move_money_to_ready_to_assign':
+          return await this.moveMoneyToReadyToAssign(step.params);
         case 'get_state':
           return await this.getState();
         default:
@@ -327,6 +330,40 @@ export class YnabTestRunner {
       return { success: true, data: response.body };
     }
     return { success: false, error: response.body.message || 'Failed to assign money' };
+  }
+
+  private async moveMoneyToReadyToAssign(params: any): Promise<StepResult> {
+    // Find category ID by name from the current state
+    let categoryId = null;
+    if (params.category_name) {
+      const currentState = await this.getCurrentState();
+      const category = currentState.categories.find(c => c.name === params.category_name);
+      if (category) {
+        categoryId = category.id;
+      } else {
+        return { success: false, error: `Category '${params.category_name}' not found` };
+      }
+    }
+
+    // Use current month for the move
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = now.getMonth() + 1;
+
+    const response = await request(this.app.getHttpServer())
+      .post('/categories/move-money-to-ready-to-assign')
+      .set('Authorization', `Bearer ${this.authToken}`)
+      .send({
+        sourceCategoryId: categoryId,
+        amount: params.amount,
+        year: year,
+        month: month
+      });
+
+    if (response.status === 201) {
+      return { success: true, data: response.body };
+    }
+    return { success: false, error: response.body.message || 'Failed to move money to ready to assign' };
   }
 
   private async getState(): Promise<StepResult> {

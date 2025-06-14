@@ -16,11 +16,14 @@ export class ReadyToAssignService {
 
     // Calculate Total Available Money from accounts
     const totalAvailableMoney = await this.calculateTotalAvailableMoney(supabase, budgetId, userId);
-    
+
     // Calculate Total Assigned Money from all category balances across all months
     const totalAssignedMoney = await this.calculateTotalAssignedMoney(supabase, budgetId, userId);
 
-    return totalAvailableMoney - totalAssignedMoney;
+    // Calculate negative available balances (money moved back to Ready to Assign)
+    const negativeAvailableBalances = await this.calculateNegativeAvailableBalances(supabase, budgetId, userId);
+
+    return totalAvailableMoney - totalAssignedMoney + negativeAvailableBalances;
   }
 
   private async calculateTotalAvailableMoney(supabase: SupabaseClient, budgetId: string, userId: string): Promise<number> {
@@ -84,15 +87,42 @@ export class ReadyToAssignService {
       throw new Error(error.message);
     }
 
-    // Sum all positive assigned amounts across all months
+    // Sum all assigned amounts across all months (including negative ones)
+    // Negative assigned amounts represent money moved back to Ready to Assign
     let totalAssigned = 0;
     for (const balance of categoryBalances) {
       const assigned = balance.assigned || 0;
-      if (assigned > 0) {
-        totalAssigned += assigned;
-      }
+      totalAssigned += assigned;
     }
 
     return totalAssigned;
+  }
+
+  private async calculateNegativeAvailableBalances(supabase: SupabaseClient, budgetId: string, userId: string): Promise<number> {
+    const { data: categoryBalances, error } = await supabase
+      .from('category_balances')
+      .select('available, assigned')
+      .eq('budget_id', budgetId)
+      .eq('user_id', userId);
+
+    if (error) {
+      throw new Error(error.message);
+    }
+
+    // Sum negative available amounts only when assigned is not negative
+    // (to avoid double-counting money moved back to Ready to Assign)
+    let totalNegativeAvailable = 0;
+    for (const balance of categoryBalances) {
+      const available = balance.available || 0;
+      const assigned = balance.assigned || 0;
+
+      // Only count negative available if assigned is not negative
+      // (negative assigned already represents money moved to Ready to Assign)
+      if (available < 0 && assigned >= 0) {
+        totalNegativeAvailable += Math.abs(available);
+      }
+    }
+
+    return totalNegativeAvailable;
   }
 }

@@ -63,20 +63,39 @@
         "payee": "Store",
         "amount": 50
       }
+    },
+    {
+      "action": "move_money_to_ready_to_assign",
+      "description": "Move the $100 available from category to Ready to Assign",
+      "params": {
+        "category_name": "Groceries",
+        "amount": 100
+      }
+    },
+    {
+      "action": "get_state",
+      "description": "Check state after moving money"
+    },
+    {
+      "action": "delete_transaction",
+      "description": "Delete the transaction",
+      "params": {
+        "payee": "Store"
+      }
     }
   ],
   "expectedFinalState": {
-    "readyToAssign": 950,
+    "readyToAssign": 1050,
     "accounts": {
       "Checking": {
-        "working_balance": 1050
+        "working_balance": 1000
       }
     },
     "categories": {
       "Groceries": {
-        "assigned": 50,
-        "activity": 50,
-        "available": 100
+        "assigned": -50,
+        "activity": 0,
+        "available": -50
       }
     }
   },
@@ -86,6 +105,11 @@
     "Updating transaction from -$50 to +$50 changes activity from -50 to +50",
     "Final category state: assigned=50, activity=+50, available=100",
     "Account working balance: $1000 + $50 (inflow) = $1050",
-    "Ready to Assign remains at $950 (assignment stays in place)"
+    "Ready to Assign remains at $950 (assignment stays in place)",
+    "Moving $100 to Ready to Assign: assigned=-50, activity=+50, available=0",
+    "Ready to Assign becomes: $950 + $100 = $1050",
+    "Deleting transaction removes activity: assigned=-50, activity=0, available=-50",
+    "Final account working balance: $1000 (transaction deleted)",
+    "Final Ready to Assign: $1050, Final category: assigned=-50, activity=0, available=-50"
   ]
 }

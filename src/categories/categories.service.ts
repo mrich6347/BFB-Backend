@@ -709,7 +709,6 @@ export class CategoriesService {
     }
 
     // Update source category balance (subtract amount from both available and assigned)
-    // This effectively moves the money back to Ready to Assign by "un-assigning" it
     const { error: updateError } = await supabase
       .from('category_balances')
       .update({
@@ -724,6 +723,8 @@ export class CategoriesService {
     if (updateError) {
       throw new Error(updateError.message);
     }
+
+
   }
 
   async pullFromReadyToAssign(
