@@ -21,13 +21,15 @@ export class AccountsService {
   async create(createAccountDto: CreateAccountDto, userId: string, authToken: string): Promise<AccountWithReadyToAssignResponse> {
     const supabase = this.supabaseService.getAuthenticatedClient(authToken);
 
-    const { current_balance, ...accountData } = createAccountDto;
+    const { account_balance, ...accountData } = createAccountDto;
 
     let payload = {
       ...accountData,
       user_id: userId,
-      cleared_balance: current_balance,
-      working_balance: current_balance
+      account_balance: account_balance || 0,
+      cleared_balance: account_balance || 0,
+      uncleared_balance: 0,
+      working_balance: account_balance || 0
     }
 
     await this.checkForExistingAccount(userId, authToken, accountData.budget_id, accountData.name);
@@ -35,7 +37,7 @@ export class AccountsService {
     const { data, error } = await supabase
       .from('accounts')
       .insert(payload)
-      .select('id, name, account_type, budget_id, interest_rate, minimum_monthly_payment, cleared_balance, uncleared_balance, working_balance, is_active')
+      .select('id, name, account_type, budget_id, interest_rate, minimum_monthly_payment, account_balance, cleared_balance, uncleared_balance, working_balance, is_active')
       .single();
 
     if (error) {
@@ -60,7 +62,7 @@ export class AccountsService {
 
     const { data, error } = await supabase
       .from('accounts')
-      .select('id, name, account_type, budget_id, interest_rate, minimum_monthly_payment, cleared_balance, uncleared_balance, working_balance, is_active')
+      .select('id, name, account_type, budget_id, interest_rate, minimum_monthly_payment, account_balance, cleared_balance, uncleared_balance, working_balance, is_active')
       .eq('user_id', userId)
       .eq('budget_id', budgetId);
 
@@ -76,7 +78,7 @@ export class AccountsService {
 
     const { data, error } = await supabase
       .from('accounts')
-      .select('id, name, account_type, budget_id, interest_rate, minimum_monthly_payment, cleared_balance, uncleared_balance, working_balance, is_active')
+      .select('id, name, account_type, budget_id, interest_rate, minimum_monthly_payment, account_balance, cleared_balance, uncleared_balance, working_balance, is_active')
       .eq('id', id)
       .eq('user_id', userId)
       .single();
@@ -130,7 +132,7 @@ export class AccountsService {
       .update(updateAccountDto)
       .eq('id', accountId)
       .eq('user_id', userId)
-      .select('id, name, account_type, budget_id, interest_rate, minimum_monthly_payment, cleared_balance, uncleared_balance, working_balance, is_active')
+      .select('id, name, account_type, budget_id, interest_rate, minimum_monthly_payment, account_balance, cleared_balance, uncleared_balance, working_balance, is_active')
       .single();
 
     if (error) {
@@ -180,6 +182,7 @@ export class AccountsService {
       .from('accounts')
       .update({
         is_active: false,
+        account_balance: 0,
         cleared_balance: 0,
         uncleared_balance: 0,
         working_balance: 0
@@ -276,9 +279,11 @@ export class AccountsService {
     await this.transactionsService.markTransactionsAsReconciled(accountId, userId, authToken);
 
     // Update account balance to match the actual balance
+    // When reconciling, we set the account_balance to the actual balance
     const { error: updateError } = await supabase
       .from('accounts')
       .update({
+        account_balance: actualBalance,
         cleared_balance: actualBalance,
         working_balance: actualBalance + account.uncleared_balance
       })

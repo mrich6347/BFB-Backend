@@ -599,8 +599,10 @@ export class TransactionsService {
 
   /**
    * Update account balances based on current transactions
-   * Logic: Don't try to reverse-engineer the initial balance.
-   * Just calculate the balances based on the current working balance and transactions.
+   * Logic:
+   * - Cleared Balance = Account Balance (starting balance) + Sum of Cleared Transactions
+   * - Uncleared Balance = Sum of Uncleared Transactions
+   * - Working Balance = Cleared Balance + Uncleared Balance
    */
   private async updateAccountBalances(accountId: string, userId: string, authToken: string): Promise<void> {
     console.log(`🔄 Updating account balances for account: ${accountId}`);
@@ -617,10 +619,10 @@ export class TransactionsService {
       throw new Error(transactionsError.message);
     }
 
-    // Get current account working balance (this should remain constant unless reconciled)
+    // Get current account to get the account_balance (starting balance)
     const { data: account, error: accountError } = await supabase
       .from('accounts')
-      .select('working_balance')
+      .select('account_balance')
       .eq('id', accountId)
       .eq('user_id', userId)
       .single();
@@ -642,22 +644,17 @@ export class TransactionsService {
       }
     }
 
-    // The working balance should be the sum of all transactions plus the initial balance
-    // So: initial_balance = working_balance - all_transactions
-    const currentWorkingBalance = parseFloat(account.working_balance.toString());
-    const totalTransactions = clearedTransactionTotal + unclearedTransactionTotal;
-    const initialBalance = currentWorkingBalance - totalTransactions;
+    // Get the starting balance from the account_balance field
+    const accountBalance = parseFloat(account.account_balance.toString());
 
-    // Calculate the correct balances
-    const newClearedBalance = initialBalance + clearedTransactionTotal;
+    // Calculate the correct balances using the simple, clear formula
+    const newClearedBalance = accountBalance + clearedTransactionTotal;
     const newUnclearedBalance = unclearedTransactionTotal;
     const newWorkingBalance = newClearedBalance + newUnclearedBalance;
 
     console.log(`💰 Account balance calculation:`, {
       accountId,
-      currentWorkingBalance,
-      totalTransactions,
-      initialBalance,
+      accountBalance,
       clearedTransactionTotal,
       unclearedTransactionTotal,
       newClearedBalance,

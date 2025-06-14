@@ -14,7 +14,7 @@ export class CreateAccountDto {
     account_type: AccountType;
 
     @IsNumber()
-    current_balance: number;
+    account_balance: number;
                                             
     @IsNumber()
     @IsOptional()
@@ -36,6 +36,7 @@ export class AccountResponse {
     budget_id: string;
     interest_rate?: number;
     minimum_monthly_payment?: number;
+    account_balance: number;
     cleared_balance: number;
     uncleared_balance: number;
     working_balance: number;

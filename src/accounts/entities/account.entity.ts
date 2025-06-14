@@ -12,6 +12,7 @@ export class Account {
     budgetId: string | null;
     name: string;
     accountType: AccountType;
+    accountBalance: number;
     clearedBalance: number;
     unclearedBalance: number;
     workingBalance: number;
