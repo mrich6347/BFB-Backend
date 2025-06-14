@@ -56,6 +56,15 @@ export class TransactionsService {
       }
     }
 
+    // Update account balances after creating transaction
+    console.log(`🆕 Transaction created, updating account balances for account: ${data.account_id}`);
+    try {
+      await this.updateAccountBalances(data.account_id, userId, authToken);
+    } catch (balanceError) {
+      console.error('❌ Error updating account balances:', balanceError);
+      // Don't throw here - transaction was created successfully, balance update is secondary
+    }
+
     return data;
   }
 
@@ -239,6 +248,19 @@ export class TransactionsService {
       }
     }
 
+    // Update account balances after updating transaction
+    try {
+      await this.updateAccountBalances(data.account_id, userId, authToken);
+
+      // If account changed, also update the old account
+      if (originalTransaction.account_id !== data.account_id) {
+        await this.updateAccountBalances(originalTransaction.account_id, userId, authToken);
+      }
+    } catch (balanceError) {
+      console.error('Error updating account balances:', balanceError);
+      // Don't throw here - transaction was updated successfully, balance update is secondary
+    }
+
     return data;
   }
 
@@ -288,6 +310,14 @@ export class TransactionsService {
         }
       }
     }
+
+    // Update account balances after deleting transaction
+    try {
+      await this.updateAccountBalances(transaction.account_id, userId, authToken);
+    } catch (balanceError) {
+      console.error('Error updating account balances:', balanceError);
+      // Don't throw here - transaction was deleted successfully, balance update is secondary
+    }
   }
 
   async toggleCleared(id: string, userId: string, authToken: string): Promise<TransactionResponse> {
@@ -296,7 +326,7 @@ export class TransactionsService {
     // First get the current transaction
     const { data: currentTransaction, error: fetchError } = await supabase
       .from('transactions')
-      .select('is_cleared')
+      .select('*')
       .eq('id', id)
       .eq('user_id', userId)
       .single();
@@ -316,6 +346,14 @@ export class TransactionsService {
 
     if (error) {
       throw new Error(error.message);
+    }
+
+    // Update account balances after toggling cleared status
+    try {
+      await this.updateAccountBalances(data.account_id, userId, authToken);
+    } catch (balanceError) {
+      console.error('Error updating account balances:', balanceError);
+      // Don't throw here - transaction was updated successfully, balance update is secondary
     }
 
     return data;
@@ -523,5 +561,115 @@ export class TransactionsService {
         authToken
       );
     }
+  }
+
+  /**
+   * Update account balances based on current transactions
+   */
+  private async updateAccountBalances(accountId: string, userId: string, authToken: string): Promise<void> {
+    console.log(`🔄 Updating account balances for account: ${accountId}`);
+    const supabase = this.supabaseService.getAuthenticatedClient(authToken);
+
+    // We need to get the initial account balance. The approach is:
+    // 1. Get the account when it was first created (this is stored in cleared_balance initially)
+    // 2. Calculate the sum of all transactions
+    // 3. Update balances accordingly
+
+    // First, let's get the account creation balance by checking if there are any transactions
+    // If no transactions exist, the current cleared_balance is the initial balance
+    // If transactions exist, we need to reverse-calculate the initial balance
+
+    // Get all transactions for this account
+    const { data: transactions, error: transactionsError } = await supabase
+      .from('transactions')
+      .select('amount, is_cleared')
+      .eq('account_id', accountId)
+      .eq('user_id', userId);
+
+    if (transactionsError) {
+      throw new Error(transactionsError.message);
+    }
+
+    // Get current account data
+    const { data: account, error: accountError } = await supabase
+      .from('accounts')
+      .select('cleared_balance, uncleared_balance, working_balance')
+      .eq('id', accountId)
+      .eq('user_id', userId)
+      .single();
+
+    if (accountError) {
+      throw new Error(accountError.message);
+    }
+
+    // Calculate transaction totals
+    let clearedTransactionTotal = 0;
+    let unclearedTransactionTotal = 0;
+
+    for (const transaction of transactions) {
+      if (transaction.is_cleared) {
+        clearedTransactionTotal += transaction.amount;
+      } else {
+        unclearedTransactionTotal += transaction.amount;
+      }
+    }
+
+    // Calculate the initial balance by working backwards from current state
+    // If this is the first time we're calculating, we assume the current cleared_balance
+    // minus any cleared transactions is the initial balance
+    let initialBalance: number;
+
+    if (transactions.length === 0) {
+      // No transactions, so current cleared_balance is the initial balance
+      initialBalance = parseFloat(account.cleared_balance.toString());
+    } else {
+      // Calculate initial balance: current_cleared_balance - cleared_transactions
+      // But only if this looks like it hasn't been properly calculated before
+      const currentClearedBalance = parseFloat(account.cleared_balance.toString());
+      const currentUnclearedBalance = parseFloat(account.uncleared_balance.toString());
+
+      // If uncleared_balance is 0 and we have uncleared transactions, this account hasn't been updated properly
+      if (currentUnclearedBalance === 0 && unclearedTransactionTotal !== 0) {
+        // This account needs to be recalculated from scratch
+        // Assume the current cleared_balance is the initial balance
+        initialBalance = currentClearedBalance;
+      } else {
+        // Account seems to be properly maintained, calculate initial balance
+        initialBalance = currentClearedBalance - clearedTransactionTotal;
+      }
+    }
+
+    // Now calculate the correct balances
+    const newClearedBalance = initialBalance + clearedTransactionTotal;
+    const newUnclearedBalance = unclearedTransactionTotal;
+    const newWorkingBalance = newClearedBalance + newUnclearedBalance;
+
+    console.log(`💰 Account balance calculation:`, {
+      accountId,
+      initialBalance,
+      clearedTransactionTotal,
+      unclearedTransactionTotal,
+      newClearedBalance,
+      newUnclearedBalance,
+      newWorkingBalance
+    });
+
+    // Update the account with new balances
+    const { error: updateError } = await supabase
+      .from('accounts')
+      .update({
+        cleared_balance: newClearedBalance,
+        uncleared_balance: newUnclearedBalance,
+        working_balance: newWorkingBalance
+      })
+      .eq('id', accountId)
+      .eq('user_id', userId);
+
+    if (updateError) {
+      console.error(`❌ Error updating account balances:`, updateError);
+      throw new Error(updateError.message);
+    }
+
+    console.log(`✅ Successfully updated account balances for account: ${accountId}`);
   }
 }
