@@ -1,6 +1,6 @@
 import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards, Req, Query, ParseUUIDPipe, ParseIntPipe } from '@nestjs/common';
 import { CategoriesService } from './categories.service';
-import { CreateCategoryDto, UpdateCategoryDto, CategoryResponse, ReorderCategoriesDto, MoveMoneyDto, PullFromReadyToAssignDto, CategoryWithReadyToAssignResponse } from './dto/category.dto';
+import { CreateCategoryDto, UpdateCategoryDto, CategoryResponse, ReorderCategoriesDto, MoveMoneyDto, PullFromReadyToAssignDto, CategoryWithReadyToAssignResponse, CategoryUpdateWithAffectedCategoriesResponse } from './dto/category.dto';
 import { SupabaseAuthGuard } from '../guards/auth.guard';
 import { AuthService } from '../configurations/auth/auth.service';
 
@@ -47,9 +47,9 @@ export class CategoriesController {
     @Req() req: any,
     @Query('year', new ParseIntPipe({ optional: true })) year?: number,
     @Query('month', new ParseIntPipe({ optional: true })) month?: number
-  ): Promise<CategoryWithReadyToAssignResponse> {
+  ): Promise<CategoryUpdateWithAffectedCategoriesResponse> {
     const authToken = this.authService.getAuthToken(req);
-    return this.categoriesService.update(id, updateCategoryDto, req.user.id, authToken, year, month);
+    return this.categoriesService.updateWithAffectedCategories(id, updateCategoryDto, req.user.id, authToken, year, month);
   }
 
   @Delete(':id')

@@ -110,3 +110,9 @@ export class CategoryWithReadyToAssignResponse {
   category: CategoryResponse;
   readyToAssign: number;
 }
+
+export class CategoryUpdateWithAffectedCategoriesResponse {
+  category: CategoryResponse;
+  readyToAssign: number;
+  affectedCategories?: CategoryResponse[]; // Payment categories that were updated due to debt coverage
+}

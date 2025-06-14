@@ -1,13 +1,15 @@
 import { Injectable } from '@nestjs/common';
 import { SupabaseService } from '../supabase/supabase.service';
-import { CreateCategoryDto, UpdateCategoryDto, CategoryResponse, ReorderCategoriesDto, CategoryWithReadyToAssignResponse } from './dto/category.dto';
+import { CreateCategoryDto, UpdateCategoryDto, CategoryResponse, ReorderCategoriesDto, CategoryWithReadyToAssignResponse, CategoryUpdateWithAffectedCategoriesResponse } from './dto/category.dto';
 import { ReadyToAssignService } from '../ready-to-assign/ready-to-assign.service';
+import { DebtTrackingService } from '../debt-tracking/debt-tracking.service';
 
 @Injectable()
 export class CategoriesService {
   constructor(
     private readonly supabaseService: SupabaseService,
-    private readonly readyToAssignService: ReadyToAssignService
+    private readonly readyToAssignService: ReadyToAssignService,
+    private readonly debtTrackingService: DebtTrackingService
   ) {}
 
   async create(createCategoryDto: CreateCategoryDto, userId: string, authToken: string): Promise<CategoryWithReadyToAssignResponse> {
@@ -260,6 +262,21 @@ export class CategoriesService {
 
         balanceUpdate.assigned = assigned;
 
+        // Handle debt coverage if money was added to the category
+        if (assignedDifference > 0) {
+          try {
+            await this.handleDebtCoverageForCategory(
+              id,
+              assignedDifference,
+              userId,
+              authToken
+            );
+          } catch (debtError) {
+            console.error('Error handling debt coverage:', debtError);
+            // Don't throw here - category update was successful, debt coverage is secondary
+          }
+        }
+
         // Simplified: Only update current month (no future month cascading)
       }
 
@@ -351,6 +368,63 @@ export class CategoriesService {
     return {
       category,
       readyToAssign
+    };
+  }
+
+  async updateWithAffectedCategories(id: string, updateCategoryDto: UpdateCategoryDto, userId: string, authToken: string, year?: number, month?: number): Promise<CategoryUpdateWithAffectedCategoriesResponse> {
+    // Track affected payment categories before the update
+    const affectedPaymentCategories: string[] = [];
+
+    // If we're updating assigned amount, check if this category has debt that might be covered
+    if (updateCategoryDto.assigned !== undefined) {
+      const uncoveredDebts = await this.debtTrackingService.getUncoveredDebts(id, userId, authToken);
+
+      // Collect payment category IDs that might be affected
+      for (const debt of uncoveredDebts) {
+        if (!affectedPaymentCategories.includes(debt.payment_category_id)) {
+          affectedPaymentCategories.push(debt.payment_category_id);
+        }
+      }
+    }
+
+    // Perform the regular update
+    const result = await this.update(id, updateCategoryDto, userId, authToken, year, month);
+
+    // If there are affected payment categories, fetch their updated balances
+    let affectedCategories: CategoryResponse[] = [];
+
+    if (affectedPaymentCategories.length > 0) {
+      const supabase = this.supabaseService.getAuthenticatedClient(authToken);
+      const now = new Date();
+      const targetYear = year || now.getFullYear();
+      const targetMonth = month || (now.getMonth() + 1);
+
+      // Fetch updated payment categories with their current balances
+      const { data: paymentCategoriesData, error } = await supabase
+        .from('categories')
+        .select(`
+          *,
+          category_balances!inner(assigned, activity, available)
+        `)
+        .in('id', affectedPaymentCategories)
+        .eq('user_id', userId)
+        .eq('category_balances.year', targetYear)
+        .eq('category_balances.month', targetMonth);
+
+      if (!error && paymentCategoriesData) {
+        affectedCategories = paymentCategoriesData.map(cat => ({
+          ...cat,
+          assigned: cat.category_balances[0]?.assigned || 0,
+          activity: cat.category_balances[0]?.activity || 0,
+          available: cat.category_balances[0]?.available || 0
+        }));
+      }
+    }
+
+    return {
+      category: result.category,
+      readyToAssign: result.readyToAssign,
+      affectedCategories: affectedCategories.length > 0 ? affectedCategories : undefined
     };
   }
 
@@ -690,6 +764,166 @@ export class CategoriesService {
 
       if (updateError) {
         throw new Error(updateError.message);
+      }
+    }
+  }
+
+  /**
+   * Handle debt coverage when money is assigned to categories
+   */
+  private async handleDebtCoverageForCategory(
+    categoryId: string,
+    assignedAmountIncrease: number,
+    userId: string,
+    authToken: string
+  ): Promise<void> {
+    if (assignedAmountIncrease <= 0) return;
+
+    console.log(`💰 Attempting to cover debt for category ${categoryId} with ${assignedAmountIncrease}`);
+
+    // Get all uncovered debt records for this category using the debt tracking service
+    const uncoveredDebts = await this.debtTrackingService.getUncoveredDebts(categoryId, userId, authToken);
+
+    if (uncoveredDebts.length === 0) {
+      console.log('No uncovered debt found for category');
+      return;
+    }
+
+    let remainingAmount = assignedAmountIncrease;
+
+    for (const debtRecord of uncoveredDebts) {
+      if (remainingAmount <= 0) break;
+
+      const uncoveredDebt = debtRecord.debt_amount - debtRecord.covered_amount;
+      const coverageAmount = Math.min(remainingAmount, uncoveredDebt);
+
+      if (coverageAmount > 0) {
+        console.log(`📝 Covering ${coverageAmount} of debt record ${debtRecord.id}`);
+
+        // Update the debt record using the service
+        try {
+          await this.debtTrackingService.updateDebtCoverage(debtRecord.id, coverageAmount, userId, authToken);
+        } catch (updateError) {
+          console.error('Error updating debt record:', updateError);
+          continue;
+        }
+
+        // Transfer money to payment category (current month)
+        await this.handleCrossMonthDebtCoverage(
+          debtRecord,
+          coverageAmount,
+          userId,
+          authToken
+        );
+
+        remainingAmount -= coverageAmount;
+      }
+    }
+
+    console.log(`✅ Debt coverage complete. Remaining amount: ${remainingAmount}`);
+  }
+
+  /**
+   * Handle cross-month debt coverage by moving money to payment category
+   */
+  private async handleCrossMonthDebtCoverage(
+    debtRecord: any,
+    coverageAmount: number,
+    userId: string,
+    authToken: string
+  ): Promise<void> {
+    console.log(`🔄 Handling cross-month debt coverage: ${coverageAmount} to payment category ${debtRecord.payment_category_id}`);
+
+    const currentDate = new Date();
+    const currentYear = currentDate.getFullYear();
+    const currentMonth = currentDate.getMonth() + 1;
+
+    // Add money to the payment category's available balance for CURRENT month
+    await this.updateCategoryBalance(
+      debtRecord.payment_category_id,
+      debtRecord.budget_id,
+      currentYear,
+      currentMonth,
+      coverageAmount,
+      'available',
+      userId,
+      authToken
+    );
+
+    // Add activity to payment category (current month) - this is key for YNAB behavior
+    await this.updateCategoryBalance(
+      debtRecord.payment_category_id,
+      debtRecord.budget_id,
+      currentYear,
+      currentMonth,
+      coverageAmount,
+      'activity',
+      userId,
+      authToken
+    );
+  }
+
+  /**
+   * Update category balance for a specific field
+   */
+  private async updateCategoryBalance(
+    categoryId: string,
+    budgetId: string,
+    year: number,
+    month: number,
+    amount: number,
+    field: 'available' | 'assigned' | 'activity',
+    userId: string,
+    authToken: string
+  ): Promise<void> {
+    const supabase = this.supabaseService.getAuthenticatedClient(authToken);
+
+    // Get existing balance
+    const { data: existingBalance } = await supabase
+      .from('category_balances')
+      .select('*')
+      .eq('category_id', categoryId)
+      .eq('user_id', userId)
+      .eq('year', year)
+      .eq('month', month)
+      .maybeSingle();
+
+    if (existingBalance) {
+      const updateData = {
+        [field]: (existingBalance[field] || 0) + amount
+      };
+
+      const { error } = await supabase
+        .from('category_balances')
+        .update(updateData)
+        .eq('category_id', categoryId)
+        .eq('user_id', userId)
+        .eq('year', year)
+        .eq('month', month);
+
+      if (error) {
+        throw new Error(error.message);
+      }
+    } else {
+      // Create new balance record
+      const balanceData = {
+        category_id: categoryId,
+        budget_id: budgetId,
+        user_id: userId,
+        year,
+        month,
+        assigned: 0,
+        activity: 0,
+        available: 0,
+        [field]: amount
+      };
+
+      const { error } = await supabase
+        .from('category_balances')
+        .insert(balanceData);
+
+      if (error) {
+        throw new Error(error.message);
       }
     }
   }
