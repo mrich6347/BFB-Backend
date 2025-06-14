@@ -31,14 +31,7 @@ export class DebtTrackingService {
     userId: string,
     authToken: string
   ): Promise<void> {
-    console.log(`📝 ===== CREATING DEBT TRACKING RECORD =====`);
-    console.log(`📝 Transaction ID: ${transactionId}`);
-    console.log(`📝 Category ID: ${categoryId}`);
-    console.log(`📝 Payment Category ID: ${paymentCategoryId}`);
-    console.log(`📝 Debt Amount: ${debtAmount}`);
-    console.log(`📝 Covered Amount: ${coveredAmount}`);
-    console.log(`📝 Budget ID: ${budgetId}`);
-    console.log(`📝 User ID: ${userId}`);
+    console.log(`📝 Creating debt record: transaction=${transactionId}, debt=${debtAmount}, covered=${coveredAmount}`);
 
     const supabase = this.supabaseService.getAuthenticatedClient(authToken);
 
@@ -52,20 +45,16 @@ export class DebtTrackingService {
       user_id: userId
     };
 
-    console.log(`📝 Insert data:`, insertData);
-
-    const { data, error } = await supabase
+    const { error } = await supabase
       .from('credit_card_debt_tracking')
-      .insert(insertData)
-      .select('*');
+      .insert(insertData);
 
     if (error) {
       console.error('❌ Error creating debt tracking record:', error);
       throw new Error(error.message);
     }
 
-    console.log(`✅ Successfully created debt tracking record:`, data);
-    console.log(`📝 ===== DEBT TRACKING RECORD CREATION COMPLETE =====`);
+    console.log(`✅ Debt tracking record created successfully`);
   }
 
   /**
@@ -215,9 +204,7 @@ export class DebtTrackingService {
     userId: string,
     authToken: string
   ): Promise<DebtTrackingRecord[]> {
-    console.log(`🔍 ===== FETCHING DEBT RECORDS FOR TRANSACTION =====`);
-    console.log(`🔍 Transaction ID: ${transactionId}`);
-    console.log(`🔍 User ID: ${userId}`);
+    console.log(`🔍 Fetching debt records for transaction ${transactionId}`);
 
     const supabase = this.supabaseService.getAuthenticatedClient(authToken);
 
@@ -232,8 +219,7 @@ export class DebtTrackingService {
       return [];
     }
 
-    console.log(`🔍 Found ${debtRecords?.length || 0} debt records:`, debtRecords);
-    console.log(`🔍 ===== DEBT RECORDS FETCH COMPLETE =====`);
+    console.log(`🔍 Found ${debtRecords?.length || 0} debt records`);
 
     return debtRecords || [];
   }
