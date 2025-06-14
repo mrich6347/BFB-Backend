@@ -487,6 +487,129 @@ export class CategoriesService {
     }
   }
 
+  async batchUpdateAssigned(
+    updates: { category_id: string; amount: number }[],
+    userId: string,
+    authToken: string,
+    year: number,
+    month: number
+  ): Promise<{ successCount: number; appliedCategories: { category_id: string; amount: number }[] }> {
+    const supabase = this.supabaseService.getAuthenticatedClient(authToken);
+    let successCount = 0;
+    const appliedCategories: { category_id: string; amount: number }[] = [];
+
+    // Process updates in batches for better performance
+    for (const update of updates) {
+      try {
+        // Get current balance for this category
+        const { data: currentBalance } = await supabase
+          .from('category_balances')
+          .select('assigned, available')
+          .eq('category_id', update.category_id)
+          .eq('user_id', userId)
+          .eq('year', year)
+          .eq('month', month)
+          .single();
+
+        let assignedDifference = 0;
+        let newAssigned = update.amount;
+        let newAvailable = update.amount;
+
+        if (currentBalance) {
+          // For auto-assign, we ADD the amount to existing assigned (not set to that amount)
+          newAssigned = (currentBalance.assigned || 0) + update.amount;
+          assignedDifference = update.amount; // The amount we're adding
+          // Update available by adding the difference (YNAB behavior)
+          newAvailable = (currentBalance.available || 0) + assignedDifference;
+        } else {
+          // No existing balance, so available equals assigned for new records
+          assignedDifference = update.amount;
+          newAvailable = update.amount;
+          newAssigned = update.amount;
+        }
+
+        // Update or create balance record
+        const balanceUpdate = {
+          assigned: newAssigned,
+          available: newAvailable
+        };
+
+        if (currentBalance) {
+          // Update existing balance
+          const { error: balanceError } = await supabase
+            .from('category_balances')
+            .update(balanceUpdate)
+            .eq('category_id', update.category_id)
+            .eq('user_id', userId)
+            .eq('year', year)
+            .eq('month', month);
+
+          if (balanceError) {
+            console.error(`Failed to update balance for category ${update.category_id}:`, balanceError);
+            continue;
+          }
+        } else {
+          // Create new balance record - need to get budget_id first
+          const { data: categoryData } = await supabase
+            .from('categories')
+            .select('budget_id')
+            .eq('id', update.category_id)
+            .eq('user_id', userId)
+            .single();
+
+          if (!categoryData) {
+            console.error(`Category not found: ${update.category_id}`);
+            continue;
+          }
+
+          const { error: insertError } = await supabase
+            .from('category_balances')
+            .insert({
+              category_id: update.category_id,
+              budget_id: categoryData.budget_id,
+              user_id: userId,
+              year: year,
+              month: month,
+              assigned: update.amount,
+              activity: 0,
+              available: newAvailable
+            });
+
+          if (insertError) {
+            console.error(`Failed to create balance for category ${update.category_id}:`, insertError);
+            continue;
+          }
+        }
+
+        // Handle debt coverage if money was added to the category
+        if (assignedDifference > 0) {
+          try {
+            await this.handleDebtCoverageForCategory(
+              update.category_id,
+              assignedDifference,
+              userId,
+              authToken
+            );
+          } catch (debtError) {
+            console.error('Error handling debt coverage:', debtError);
+            // Don't fail the whole operation for debt coverage errors
+          }
+        }
+
+        successCount++;
+        appliedCategories.push({
+          category_id: update.category_id,
+          amount: update.amount // This represents the amount added, not the total assigned
+        });
+      } catch (error) {
+        console.error(`Failed to update category ${update.category_id}:`, error);
+        // Continue with other categories even if one fails
+      }
+    }
+
+    return { successCount, appliedCategories };
+  }
+
   async moveMoney(
     sourceCategoryId: string,
     destinationCategoryId: string,

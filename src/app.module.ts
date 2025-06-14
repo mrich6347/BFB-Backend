@@ -12,6 +12,7 @@ import { CategoriesModule } from './categories/categories.module';
 import { CategoryBalancesModule } from './category-balances/category-balances.module';
 import { DatabaseManagementModule } from './database-management/database-management.module';
 import { TransactionsModule } from './transactions/transactions.module';
+import { AutoAssignModule } from './auto-assign/auto-assign.module';
 
 @Module({
   imports: [
@@ -25,7 +26,8 @@ import { TransactionsModule } from './transactions/transactions.module';
     CategoriesModule,
     CategoryBalancesModule,
     DatabaseManagementModule,
-    TransactionsModule
+    TransactionsModule,
+    AutoAssignModule
   ],
   controllers: [AppController],
   providers: [AppService],

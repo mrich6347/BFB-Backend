@@ -7,6 +7,7 @@ import { CategoriesService } from '../categories/categories.service';
 import { CategoryBalancesService } from '../category-balances/category-balances.service';
 import { ReadyToAssignService } from '../ready-to-assign/ready-to-assign.service';
 import { TransactionsService } from '../transactions/transactions.service';
+import { AutoAssignService } from '../auto-assign/auto-assign.service';
 
 @Injectable()
 export class MainDataService {
@@ -17,21 +18,23 @@ export class MainDataService {
         private readonly categoriesService: CategoriesService,
         private readonly categoryBalancesService: CategoryBalancesService,
         private readonly readyToAssignService: ReadyToAssignService,
-        private readonly transactionsService: TransactionsService
+        private readonly transactionsService: TransactionsService,
+        private readonly autoAssignService: AutoAssignService
     ) {}
 
     async getMainData(budgetId: string, authToken: string, userId: string): Promise<MainDataResponse> {
         // First, check if we need to roll over to current month
         await this.checkAndHandleMonthRollover(budgetId, userId, authToken);
 
-        const [budget, accounts, categoryGroups, categories, categoryBalances, transactions, readyToAssign] = await Promise.all([
+        const [budget, accounts, categoryGroups, categories, categoryBalances, transactions, readyToAssign, autoAssignConfigurations] = await Promise.all([
             this.budgetsService.findOne(budgetId, userId, authToken),
             this.accountsService.findAll(userId, authToken, budgetId),
             this.categoryGroupsService.findAll(budgetId, userId, authToken),
             this.categoriesService.findAllByBudgetWithoutBalances(budgetId, userId, authToken),
             this.categoryBalancesService.findAllByBudget(budgetId, userId, authToken), // Now only returns current month
             this.transactionsService.findAllByBudget(budgetId, userId, authToken),
-            this.readyToAssignService.calculateReadyToAssign(budgetId, userId, authToken)
+            this.readyToAssignService.calculateReadyToAssign(budgetId, userId, authToken),
+            this.autoAssignService.findAllByBudget(budgetId, userId, authToken)
         ]);
 
 
@@ -42,7 +45,8 @@ export class MainDataService {
            categories,
            categoryBalances,
            transactions,
-           readyToAssign
+           readyToAssign,
+           autoAssignConfigurations
         }
     }
 

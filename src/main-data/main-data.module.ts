@@ -9,6 +9,7 @@ import { CategoriesModule } from '../categories/categories.module';
 import { CategoryBalancesModule } from '../category-balances/category-balances.module';
 import { ReadyToAssignModule } from '../ready-to-assign/ready-to-assign.module';
 import { TransactionsModule } from '../transactions/transactions.module';
+import { AutoAssignModule } from '../auto-assign/auto-assign.module';
 
 @Module({
   controllers: [MainDataController],
@@ -21,7 +22,8 @@ import { TransactionsModule } from '../transactions/transactions.module';
     CategoriesModule,
     CategoryBalancesModule,
     ReadyToAssignModule,
-    TransactionsModule
+    TransactionsModule,
+    AutoAssignModule
   ],
 })
 export class MainDataModule {}
