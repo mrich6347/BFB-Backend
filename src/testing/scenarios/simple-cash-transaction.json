@@ -1,0 +1,75 @@
+{
+  "name": "Simple Cash Transaction Test",
+  "description": "Create budget, cash account, category, assign money, do transaction, verify activity/assigned/available",
+  "steps": [
+    {
+      "action": "create_budget",
+      "description": "Create test budget",
+      "params": {
+        "name": "Test Budget",
+        "currency": "USD",
+        "currency_placement": "BEFORE",
+        "date_format": "US_SLASH",
+        "number_format": "DOT_COMMA"
+      }
+    },
+    {
+      "action": "create_account",
+      "description": "Create checking account with $1000",
+      "params": {
+        "name": "Checking",
+        "account_type": "CASH",
+        "account_balance": 1000
+      }
+    },
+    {
+      "action": "create_category_group",
+      "description": "Create category group",
+      "params": {
+        "name": "Monthly Expenses"
+      }
+    },
+    {
+      "action": "create_category",
+      "description": "Create groceries category",
+      "params": {
+        "name": "Groceries",
+        "category_group_name": "Monthly Expenses"
+      }
+    },
+    {
+      "action": "assign_money",
+      "description": "Assign $100 to groceries",
+      "params": {
+        "category_name": "Groceries",
+        "amount": 100
+      }
+    },
+    {
+      "action": "create_transaction",
+      "description": "Spend $50 on groceries",
+      "params": {
+        "account_name": "Checking",
+        "payee": "Store",
+        "category_name": "Groceries",
+        "amount": -50,
+        "date": "2024-01-15"
+      }
+    }
+  ],
+  "expectedFinalState": {
+    "readyToAssign": 900,
+    "accounts": {
+      "Checking": {
+        "working_balance": 950
+      }
+    },
+    "categories": {
+      "Groceries": {
+        "assigned": 100,
+        "activity": -50,
+        "available": 50
+      }
+    }
+  }
+}

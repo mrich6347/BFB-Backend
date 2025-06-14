@@ -1,0 +1,69 @@
+{
+  "name": "YNAB Overspending Behavior Test",
+  "description": "Test YNAB overspending: $1000 cash account, spend $50 from unassigned category, verify Ready to Assign stays 1000, category shows negative available",
+  "steps": [
+    {
+      "action": "create_budget",
+      "description": "Create test budget",
+      "params": {
+        "name": "YNAB Test Budget",
+        "currency": "USD",
+        "currency_placement": "BEFORE",
+        "date_format": "US_SLASH",
+        "number_format": "DOT_COMMA"
+      }
+    },
+    {
+      "action": "create_account",
+      "description": "Create cash account with $1000",
+      "params": {
+        "name": "Checking",
+        "account_type": "CASH",
+        "account_balance": 1000
+      }
+    },
+    {
+      "action": "get_state",
+      "description": "Verify initial state: Ready to Assign = 1000, Account = 1000"
+    },
+    {
+      "action": "create_transaction",
+      "description": "Spend $50 from Groceries category (overspending)",
+      "params": {
+        "account_name": "Checking",
+        "payee": "Store",
+        "category_name": "Groceries",
+        "amount": -50,
+        "date": "2025-06-14"
+      }
+    },
+    {
+      "action": "get_state",
+      "description": "Verify final state after overspending"
+    }
+  ],
+  "expectedFinalState": {
+    "readyToAssign": 1000,
+    "accounts": {
+      "Checking": {
+        "working_balance": 950
+      }
+    },
+    "categories": {
+      "Groceries": {
+        "assigned": 0,
+        "activity": -50,
+        "available": -50
+      }
+    }
+  },
+  "ynabBehaviorNotes": [
+    "In YNAB, when you overspend from a category:",
+    "1. Ready to Assign does NOT decrease (stays at 1000)",
+    "2. Account working balance decreases by transaction amount (1000 -> 950)",
+    "3. Category assigned stays 0 (no money was assigned)",
+    "4. Category activity shows the spending (-50)",
+    "5. Category available = assigned + activity = 0 + (-50) = -50",
+    "6. The negative available balance represents overspending that needs to be covered"
+  ]
+}
