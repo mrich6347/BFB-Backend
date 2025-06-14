@@ -1,4 +1,5 @@
 import { IsString, IsEnum, IsNumber, IsBoolean, IsOptional, IsUUID } from 'class-validator';
+import { Transform } from 'class-transformer';
 import { AccountType } from '../entities/account.entity';
 
 export class CreateAccountDto {
@@ -47,6 +48,7 @@ export class AccountWithReadyToAssignResponse {
 }
 
 export class ReconcileAccountDto {
+    @Transform(({ value }) => parseFloat(value))
     @IsNumber()
     actual_balance: number;
 }
