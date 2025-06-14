@@ -15,14 +15,6 @@ export class CreateAccountDto {
 
     @IsNumber()
     account_balance: number;
-                                            
-    @IsNumber()
-    @IsOptional()
-    interest_rate: number;
-
-    @IsNumber()
-    @IsOptional()
-    minimum_monthly_payment: number;
 
     @IsString()
     @IsUUID()
@@ -34,8 +26,6 @@ export class AccountResponse {
     name: string;
     account_type: AccountType;
     budget_id: string;
-    interest_rate?: number;
-    minimum_monthly_payment?: number;
     account_balance: number;
     cleared_balance: number;
     uncleared_balance: number;

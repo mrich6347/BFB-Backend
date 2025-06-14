@@ -39,23 +39,10 @@ export class ReadyToAssignService {
 
     for (const account of accounts) {
       const balance = account.working_balance || 0;
-      
-      switch (account.account_type) {
-        case AccountType.CASH:
-          // Cash accounts: always include the full balance
-          totalAvailable += balance;
-          break;
-        case AccountType.CREDIT:
-          // Credit cards: only include if balance is positive (overpayment)
-          if (balance > 0) {
-            totalAvailable += balance;
-          }
-          // Negative balances (debt) are excluded
-          break;
-        case AccountType.LOAN:
-        case AccountType.TRACKING:
-          // Loan and tracking accounts: excluded from Ready to Assign
-          break;
+
+      // Only cash accounts are supported now
+      if (account.account_type === AccountType.CASH) {
+        totalAvailable += balance;
       }
     }
 

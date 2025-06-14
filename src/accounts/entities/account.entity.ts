@@ -1,8 +1,5 @@
 export enum AccountType {
-    CASH = 'CASH',
-    CREDIT = 'CREDIT',
-    LOAN = 'LOAN',
-    TRACKING = 'TRACKING'
+    CASH = 'CASH'
 }
 
 
@@ -17,8 +14,7 @@ export class Account {
     unclearedBalance: number;
     workingBalance: number;
     displayOrder: number;
-    interestRate: number | null;
-    minimumMonthlyPayment: number | null;
+
     isActive: boolean;
     createdAt: Date;
     updatedAt: Date;

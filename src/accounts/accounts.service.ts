@@ -37,7 +37,7 @@ export class AccountsService {
     const { data, error } = await supabase
       .from('accounts')
       .insert(payload)
-      .select('id, name, account_type, budget_id, interest_rate, minimum_monthly_payment, account_balance, cleared_balance, uncleared_balance, working_balance, is_active')
+      .select('id, name, account_type, budget_id, account_balance, cleared_balance, uncleared_balance, working_balance, is_active')
       .single();
 
     if (error) {
@@ -62,7 +62,7 @@ export class AccountsService {
 
     const { data, error } = await supabase
       .from('accounts')
-      .select('id, name, account_type, budget_id, interest_rate, minimum_monthly_payment, account_balance, cleared_balance, uncleared_balance, working_balance, is_active')
+      .select('id, name, account_type, budget_id, account_balance, cleared_balance, uncleared_balance, working_balance, is_active')
       .eq('user_id', userId)
       .eq('budget_id', budgetId);
 
@@ -78,7 +78,7 @@ export class AccountsService {
 
     const { data, error } = await supabase
       .from('accounts')
-      .select('id, name, account_type, budget_id, interest_rate, minimum_monthly_payment, account_balance, cleared_balance, uncleared_balance, working_balance, is_active')
+      .select('id, name, account_type, budget_id, account_balance, cleared_balance, uncleared_balance, working_balance, is_active')
       .eq('id', id)
       .eq('user_id', userId)
       .single();
@@ -132,7 +132,7 @@ export class AccountsService {
       .update(updateAccountDto)
       .eq('id', accountId)
       .eq('user_id', userId)
-      .select('id, name, account_type, budget_id, interest_rate, minimum_monthly_payment, account_balance, cleared_balance, uncleared_balance, working_balance, is_active')
+      .select('id, name, account_type, budget_id, account_balance, cleared_balance, uncleared_balance, working_balance, is_active')
       .single();
 
     if (error) {

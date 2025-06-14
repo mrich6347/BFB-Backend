@@ -2,14 +2,12 @@ import { Injectable } from '@nestjs/common';
 import { SupabaseService } from '../supabase/supabase.service';
 import { CreateCategoryDto, UpdateCategoryDto, CategoryResponse, ReorderCategoriesDto, CategoryWithReadyToAssignResponse, CategoryUpdateWithAffectedCategoriesResponse } from './dto/category.dto';
 import { ReadyToAssignService } from '../ready-to-assign/ready-to-assign.service';
-import { DebtTrackingService } from '../debt-tracking/debt-tracking.service';
 
 @Injectable()
 export class CategoriesService {
   constructor(
     private readonly supabaseService: SupabaseService,
-    private readonly readyToAssignService: ReadyToAssignService,
-    private readonly debtTrackingService: DebtTrackingService
+    private readonly readyToAssignService: ReadyToAssignService
   ) {}
 
   async create(createCategoryDto: CreateCategoryDto, userId: string, authToken: string): Promise<CategoryWithReadyToAssignResponse> {
@@ -188,23 +186,7 @@ export class CategoriesService {
   async update(id: string, updateCategoryDto: UpdateCategoryDto, userId: string, authToken: string, year?: number, month?: number): Promise<CategoryWithReadyToAssignResponse> {
     const supabase = this.supabaseService.getAuthenticatedClient(authToken);
 
-    // Check if this is a credit card payment category and prevent name changes
-    if (updateCategoryDto.name) {
-      const { data: categoryData, error: fetchError } = await supabase
-        .from('categories')
-        .select('is_credit_card_payment')
-        .eq('id', id)
-        .eq('user_id', userId)
-        .single();
 
-      if (fetchError) {
-        throw new Error(fetchError.message);
-      }
-
-      if (categoryData.is_credit_card_payment) {
-        throw new Error('Credit card payment categories cannot be renamed');
-      }
-    }
 
     // Separate category fields from balance fields
     const { assigned, activity, available, ...categoryFields } = updateCategoryDto;
@@ -262,25 +244,7 @@ export class CategoriesService {
 
         balanceUpdate.assigned = assigned;
 
-        // Handle debt coverage if money was added to the category
-        if (assignedDifference > 0) {
-          console.log(`💰 ========== DEBT COVERAGE TRIGGER ==========`);
-          console.log(`💰 Category ${id} assigned amount increased by ${assignedDifference}`);
-          console.log(`💰 Checking for uncovered debt to cover...`);
-          try {
-            await this.handleDebtCoverageForCategory(
-              id,
-              assignedDifference,
-              userId,
-              authToken
-            );
-            console.log(`💰 Debt coverage handling complete`);
-          } catch (debtError) {
-            console.error('Error handling debt coverage:', debtError);
-            // Don't throw here - category update was successful, debt coverage is secondary
-          }
-          console.log(`💰 ========== DEBT COVERAGE END ==========`);
-        }
+
 
         // Simplified: Only update current month (no future month cascading)
       }
@@ -377,54 +341,13 @@ export class CategoriesService {
   }
 
   async updateWithAffectedCategories(id: string, updateCategoryDto: UpdateCategoryDto, userId: string, authToken: string, year?: number, month?: number): Promise<CategoryUpdateWithAffectedCategoriesResponse> {
-    // Track affected payment categories before the update
-    const affectedPaymentCategories: string[] = [];
-
-    // If we're updating assigned amount, check if this category has debt that might be covered
-    if (updateCategoryDto.assigned !== undefined) {
-      const uncoveredDebts = await this.debtTrackingService.getUncoveredDebts(id, userId, authToken);
-
-      // Collect payment category IDs that might be affected
-      for (const debt of uncoveredDebts) {
-        if (!affectedPaymentCategories.includes(debt.payment_category_id)) {
-          affectedPaymentCategories.push(debt.payment_category_id);
-        }
-      }
-    }
-
     // Perform the regular update
     const result = await this.update(id, updateCategoryDto, userId, authToken, year, month);
 
-    // If there are affected payment categories, fetch their updated balances
+    // No affected categories for cash-only system
     let affectedCategories: CategoryResponse[] = [];
 
-    if (affectedPaymentCategories.length > 0) {
-      const supabase = this.supabaseService.getAuthenticatedClient(authToken);
-      const now = new Date();
-      const targetYear = year || now.getFullYear();
-      const targetMonth = month || (now.getMonth() + 1);
 
-      // Fetch updated payment categories with their current balances
-      const { data: paymentCategoriesData, error } = await supabase
-        .from('categories')
-        .select(`
-          *,
-          category_balances!inner(assigned, activity, available)
-        `)
-        .in('id', affectedPaymentCategories)
-        .eq('user_id', userId)
-        .eq('category_balances.year', targetYear)
-        .eq('category_balances.month', targetMonth);
-
-      if (!error && paymentCategoriesData) {
-        affectedCategories = paymentCategoriesData.map(cat => ({
-          ...cat,
-          assigned: cat.category_balances[0]?.assigned || 0,
-          activity: cat.category_balances[0]?.activity || 0,
-          available: cat.category_balances[0]?.available || 0
-        }));
-      }
-    }
 
     return {
       category: result.category,
@@ -436,20 +359,16 @@ export class CategoriesService {
   async remove(id: string, userId: string, authToken: string): Promise<{ readyToAssign: number }> {
     const supabase = this.supabaseService.getAuthenticatedClient(authToken);
 
-    // Check if this is a credit card payment category and prevent deletion
+    // Get category data for budget_id
     const { data: categoryData, error: fetchError } = await supabase
       .from('categories')
-      .select('is_credit_card_payment, budget_id')
+      .select('budget_id')
       .eq('id', id)
       .eq('user_id', userId)
       .single();
 
     if (fetchError) {
       throw new Error(fetchError.message);
-    }
-
-    if (categoryData.is_credit_card_payment) {
-      throw new Error('Credit card payment categories cannot be deleted');
     }
 
     // Delete category balances first (due to foreign key constraint)
@@ -595,20 +514,7 @@ export class CategoriesService {
           }
         }
 
-        // Handle debt coverage if money was added to the category
-        if (assignedDifference > 0) {
-          try {
-            await this.handleDebtCoverageForCategory(
-              update.category_id,
-              assignedDifference,
-              userId,
-              authToken
-            );
-          } catch (debtError) {
-            console.error('Error handling debt coverage:', debtError);
-            // Don't fail the whole operation for debt coverage errors
-          }
-        }
+
 
         successCount++;
         appliedCategories.push({
@@ -748,20 +654,7 @@ export class CategoriesService {
       }
     }
 
-    // Handle debt coverage for the destination category
-    // This ensures that if the destination category has uncovered credit card debt,
-    // the money we just moved will be used to cover that debt
-    try {
-      await this.handleDebtCoverageForCategory(
-        destinationCategoryId,
-        amount,
-        userId,
-        authToken
-      );
-    } catch (debtCoverageError) {
-      console.error('Error handling debt coverage in moveMoney:', debtCoverageError);
-      // Don't throw here - the money transfer was successful, debt coverage is secondary
-    }
+
   }
 
 
@@ -919,150 +812,12 @@ export class CategoriesService {
       }
     }
 
-    // Handle debt coverage for the destination category
-    // This ensures that if the destination category has uncovered credit card debt,
-    // the money we just pulled from Ready to Assign will be used to cover that debt
-    try {
-      await this.handleDebtCoverageForCategory(
-        destinationCategoryId,
-        amount,
-        userId,
-        authToken
-      );
-    } catch (debtCoverageError) {
-      console.error('Error handling debt coverage in pullFromReadyToAssign:', debtCoverageError);
-      // Don't throw here - the money transfer was successful, debt coverage is secondary
-    }
+
   }
 
-  /**
-   * Handle debt coverage when money is assigned to categories
-   */
-  private async handleDebtCoverageForCategory(
-    categoryId: string,
-    assignedAmountIncrease: number,
-    userId: string,
-    authToken: string
-  ): Promise<void> {
-    if (assignedAmountIncrease <= 0) return;
 
-    console.log(`💰 ========== HANDLE DEBT COVERAGE FOR CATEGORY START ==========`);
-    console.log(`💰 Category ID: ${categoryId}`);
-    console.log(`💰 Assigned Amount Increase: ${assignedAmountIncrease}`);
-    console.log(`💰 User ID: ${userId}`);
 
-    // Get all uncovered debt records for this category using the debt tracking service
-    console.log(`💰 Fetching uncovered debts for category ${categoryId}...`);
-    const uncoveredDebts = await this.debtTrackingService.getUncoveredDebts(categoryId, userId, authToken);
-    console.log(`💰 Found ${uncoveredDebts.length} uncovered debt records:`, JSON.stringify(uncoveredDebts, null, 2));
 
-    if (uncoveredDebts.length === 0) {
-      console.log('💰 No uncovered debt found for category - nothing to cover');
-      console.log(`💰 ========== HANDLE DEBT COVERAGE FOR CATEGORY END ==========`);
-      return;
-    }
-
-    let remainingAmount = assignedAmountIncrease;
-    console.log(`💰 Starting debt coverage with ${remainingAmount} available`);
-
-    for (const debtRecord of uncoveredDebts) {
-      if (remainingAmount <= 0) {
-        console.log(`💰 No remaining amount to cover debt - stopping`);
-        break;
-      }
-
-      const uncoveredDebt = debtRecord.debt_amount - debtRecord.covered_amount;
-      const coverageAmount = Math.min(remainingAmount, uncoveredDebt);
-
-      console.log(`💰 Processing debt record ${debtRecord.id}:`);
-      console.log(`💰   Debt Amount: ${debtRecord.debt_amount}`);
-      console.log(`💰   Already Covered: ${debtRecord.covered_amount}`);
-      console.log(`💰   Uncovered Debt: ${uncoveredDebt}`);
-      console.log(`💰   Coverage Amount: ${coverageAmount}`);
-
-      if (coverageAmount > 0) {
-        console.log(`📝 Covering ${coverageAmount} of debt record ${debtRecord.id}`);
-
-        // Update the debt record using the service
-        try {
-          await this.debtTrackingService.updateDebtCoverage(debtRecord.id, coverageAmount, userId, authToken);
-          console.log(`📝 Debt record updated successfully`);
-        } catch (updateError) {
-          console.error('Error updating debt record:', updateError);
-          continue;
-        }
-
-        // Transfer money to payment category (current month)
-        console.log(`💸 Initiating cross-month debt coverage transfer...`);
-        await this.handleCrossMonthDebtCoverage(
-          debtRecord,
-          coverageAmount,
-          userId,
-          authToken
-        );
-        console.log(`💸 Cross-month debt coverage transfer complete`);
-
-        remainingAmount -= coverageAmount;
-        console.log(`💰 Remaining amount after coverage: ${remainingAmount}`);
-      }
-    }
-
-    console.log(`✅ Debt coverage complete. Final remaining amount: ${remainingAmount}`);
-    console.log(`💰 ========== HANDLE DEBT COVERAGE FOR CATEGORY END ==========`);
-  }
-
-  /**
-   * Handle cross-month debt coverage by moving money to payment category
-   */
-  private async handleCrossMonthDebtCoverage(
-    debtRecord: any,
-    coverageAmount: number,
-    userId: string,
-    authToken: string
-  ): Promise<void> {
-    console.log(`🔄 Handling cross-month debt coverage: ${coverageAmount} from category ${debtRecord.category_id} to payment category ${debtRecord.payment_category_id}`);
-
-    const currentDate = new Date();
-    const currentYear = currentDate.getFullYear();
-    const currentMonth = currentDate.getMonth() + 1;
-
-    // FIRST: Remove money from the spending category's available balance (current month)
-    // This is crucial - when debt is covered, the money must be moved FROM the spending category
-    await this.updateCategoryBalance(
-      debtRecord.category_id,
-      debtRecord.budget_id,
-      currentYear,
-      currentMonth,
-      -coverageAmount,
-      'available',
-      userId,
-      authToken
-    );
-
-    // THEN: Add money to the payment category's available balance for CURRENT month
-    await this.updateCategoryBalance(
-      debtRecord.payment_category_id,
-      debtRecord.budget_id,
-      currentYear,
-      currentMonth,
-      coverageAmount,
-      'available',
-      userId,
-      authToken
-    );
-
-    // Add activity to payment category (current month) - this is key for YNAB behavior
-    await this.updateCategoryBalance(
-      debtRecord.payment_category_id,
-      debtRecord.budget_id,
-      currentYear,
-      currentMonth,
-      coverageAmount,
-      'activity',
-      userId,
-      authToken
-    );
-  }
 
   /**
    * Update category balance for a specific field

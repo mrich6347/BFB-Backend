@@ -17,9 +17,7 @@ export class Category {
 
   display_order: number;
 
-  is_credit_card_payment: boolean;
 
-  linked_account_id: string | null;
 
   created_at: Date;
 
