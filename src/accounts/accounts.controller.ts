@@ -1,6 +1,6 @@
 import { Controller, Get, Post, Body, Patch, Param, Delete, Req, UseGuards, ParseUUIDPipe } from '@nestjs/common';
 import { AccountsService } from './accounts.service';
-import { AccountResponse, CreateAccountDto, AccountWithReadyToAssignResponse, ReconcileAccountDto, ReconcileAccountResponse } from './DTO/account.dto';
+import { AccountResponse, CreateAccountDto, AccountWithReadyToAssignResponse, ReconcileAccountDto, ReconcileAccountResponse, UpdateAccountDto, CloseAccountResponse } from './DTO/account.dto';
 import { AuthService } from '../configurations/auth/auth.service';
 import { SupabaseAuthGuard } from '../guards/auth.guard';
 
@@ -19,6 +19,28 @@ export class AccountsController {
   findOne(@Param('id', ParseUUIDPipe) id: string, @Req() req: any): Promise<AccountResponse> {
     const authToken = this.authService.getAuthToken(req);
     return this.accountsService.findOne(id, req.user.id, authToken);
+  }
+
+  @Patch(':id')
+  update(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() updateAccountDto: UpdateAccountDto,
+    @Req() req: any
+  ): Promise<AccountWithReadyToAssignResponse> {
+    const authToken = this.authService.getAuthToken(req);
+    return this.accountsService.update(id, updateAccountDto, req.user.id, authToken);
+  }
+
+  @Delete(':id')
+  close(@Param('id', ParseUUIDPipe) id: string, @Req() req: any): Promise<CloseAccountResponse> {
+    const authToken = this.authService.getAuthToken(req);
+    return this.accountsService.close(id, req.user.id, authToken);
+  }
+
+  @Post(':id/reopen')
+  reopen(@Param('id', ParseUUIDPipe) id: string, @Req() req: any): Promise<AccountWithReadyToAssignResponse> {
+    const authToken = this.authService.getAuthToken(req);
+    return this.accountsService.reopen(id, req.user.id, authToken);
   }
 
   @Post(':id/reconcile')

@@ -1,5 +1,5 @@
 import { ConflictException, Injectable } from '@nestjs/common';
-import { AccountResponse, CreateAccountDto, AccountWithReadyToAssignResponse, ReconcileAccountDto, ReconcileAccountResponse } from './DTO/account.dto';
+import { AccountResponse, CreateAccountDto, AccountWithReadyToAssignResponse, ReconcileAccountDto, ReconcileAccountResponse, UpdateAccountDto, CloseAccountResponse } from './DTO/account.dto';
 import { SupabaseService } from '../supabase/supabase.service';
 import { SupabaseClient } from '@supabase/supabase-js';
 import { ReadyToAssignService } from '../ready-to-assign/ready-to-assign.service';
@@ -88,15 +88,22 @@ export class AccountsService {
     return data;
   }
 
-  async checkForExistingAccount(userId: string, authToken: string, budgetId: string, accountName: string): Promise<void> {
+  async checkForExistingAccount(userId: string, authToken: string, budgetId: string, accountName: string, excludeAccountId?: string): Promise<void> {
     const supabase = this.supabaseService.getAuthenticatedClient(authToken);
 
-    const { data, error } = await supabase
+    let query = supabase
       .from('accounts')
       .select('id')
       .eq('user_id', userId)
       .eq('budget_id', budgetId)
       .ilike('name', accountName);
+
+    // Exclude the current account when updating
+    if (excludeAccountId) {
+      query = query.neq('id', excludeAccountId);
+    }
+
+    const { data, error } = await query;
 
     if (error) {
       throw new Error(error.message);
@@ -105,6 +112,139 @@ export class AccountsService {
     if (data.length > 0) {
       throw new ConflictException(`An account already exists with the name '${accountName}'`);
     }
+  }
+
+  async update(accountId: string, updateAccountDto: UpdateAccountDto, userId: string, authToken: string): Promise<AccountWithReadyToAssignResponse> {
+    const supabase = this.supabaseService.getAuthenticatedClient(authToken);
+
+    // Get the current account to validate budget_id and get current data
+    const currentAccount = await this.findOne(accountId, userId, authToken);
+
+    // If updating name, check for duplicates
+    if (updateAccountDto.name) {
+      await this.checkForExistingAccount(userId, authToken, currentAccount.budget_id, updateAccountDto.name, accountId);
+    }
+
+    const { data, error } = await supabase
+      .from('accounts')
+      .update(updateAccountDto)
+      .eq('id', accountId)
+      .eq('user_id', userId)
+      .select('id, name, account_type, budget_id, interest_rate, minimum_monthly_payment, cleared_balance, uncleared_balance, working_balance, is_active')
+      .single();
+
+    if (error) {
+      throw new Error(error.message);
+    }
+
+    // Calculate updated Ready to Assign
+    const readyToAssign = await this.readyToAssignService.calculateReadyToAssign(
+      data.budget_id,
+      userId,
+      authToken
+    );
+
+    return {
+      account: data,
+      readyToAssign
+    };
+  }
+
+  async close(accountId: string, userId: string, authToken: string): Promise<CloseAccountResponse> {
+    const supabase = this.supabaseService.getAuthenticatedClient(authToken);
+
+    // Get the account and its current working balance
+    const account = await this.findOne(accountId, userId, authToken);
+    const currentBalance = account.working_balance;
+
+    let adjustmentTransaction: TransactionResponse | null = null;
+
+    // If there's a balance, create an adjustment transaction to zero it out
+    if (Math.abs(currentBalance) > 0.001) { // Use small epsilon for floating point comparison
+      const adjustmentAmount = -currentBalance; // Opposite of current balance to zero it out
+
+      adjustmentTransaction = await this.transactionsService.create({
+        account_id: accountId,
+        date: new Date().toISOString().split('T')[0], // Today's date
+        amount: adjustmentAmount,
+        memo: `Account closure adjustment: ${adjustmentAmount > 0 ? 'Added' : 'Removed'} ${Math.abs(adjustmentAmount).toFixed(2)}`,
+        payee: 'Account Closure Adjustment',
+        category_id: undefined, // This will be treated as "Ready to Assign"
+        is_cleared: true,
+        is_reconciled: false
+      }, userId, authToken);
+    }
+
+    // Set account as inactive and zero out balances
+    const { error: updateError } = await supabase
+      .from('accounts')
+      .update({
+        is_active: false,
+        cleared_balance: 0,
+        uncleared_balance: 0,
+        working_balance: 0
+      })
+      .eq('id', accountId)
+      .eq('user_id', userId);
+
+    if (updateError) {
+      throw new Error(updateError.message);
+    }
+
+    // Get updated account
+    const updatedAccount = await this.findOne(accountId, userId, authToken);
+
+    // Calculate updated Ready to Assign
+    const readyToAssign = await this.readyToAssignService.calculateReadyToAssign(
+      account.budget_id,
+      userId,
+      authToken
+    );
+
+    return {
+      account: updatedAccount,
+      adjustmentTransaction,
+      readyToAssign
+    };
+  }
+
+  async reopen(accountId: string, userId: string, authToken: string): Promise<AccountWithReadyToAssignResponse> {
+    const supabase = this.supabaseService.getAuthenticatedClient(authToken);
+
+    // Get the account to validate it exists and is closed
+    const account = await this.findOne(accountId, userId, authToken);
+
+    if (account.is_active) {
+      throw new Error('Account is already active');
+    }
+
+    // Reactivate the account
+    const { error: updateError } = await supabase
+      .from('accounts')
+      .update({
+        is_active: true
+      })
+      .eq('id', accountId)
+      .eq('user_id', userId);
+
+    if (updateError) {
+      throw new Error(updateError.message);
+    }
+
+    // Get updated account
+    const updatedAccount = await this.findOne(accountId, userId, authToken);
+
+    // Calculate updated Ready to Assign
+    const readyToAssign = await this.readyToAssignService.calculateReadyToAssign(
+      account.budget_id,
+      userId,
+      authToken
+    );
+
+    return {
+      account: updatedAccount,
+      readyToAssign
+    };
   }
 
   async reconcileAccount(accountId: string, reconcileDto: ReconcileAccountDto, userId: string, authToken: string): Promise<ReconcileAccountResponse> {

@@ -53,6 +53,18 @@ export class ReconcileAccountDto {
     actual_balance: number;
 }
 
+export class UpdateAccountDto {
+    @IsString()
+    @IsOptional()
+    name?: string;
+}
+
+export class CloseAccountResponse {
+    account: AccountResponse;
+    adjustmentTransaction?: any; // TransactionResponse type from transactions module
+    readyToAssign: number;
+}
+
 export class ReconcileAccountResponse {
     account: AccountResponse;
     adjustmentTransaction?: any; // TransactionResponse type from transactions module
