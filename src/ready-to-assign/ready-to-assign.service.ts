@@ -24,9 +24,10 @@ export class ReadyToAssignService {
   }
 
   private async calculateTotalAvailableMoney(supabase: SupabaseClient, budgetId: string, userId: string): Promise<number> {
+    // Get account starting balances (not working balances which include spending)
     const { data: accounts, error } = await supabase
       .from('accounts')
-      .select('account_type, working_balance')
+      .select('id, account_type, account_balance')
       .eq('budget_id', budgetId)
       .eq('user_id', userId)
       .eq('is_active', true);
@@ -35,18 +36,41 @@ export class ReadyToAssignService {
       throw new Error(error.message);
     }
 
-    let totalAvailable = 0;
+    let totalFromAccounts = 0;
+    const accountIds: string[] = [];
 
-    for (const account of accounts) {
-      const balance = account.working_balance || 0;
+    for (const account of accounts || []) {
+      const balance = account.account_balance || 0;
 
       // Only cash accounts are supported now
       if (account.account_type === AccountType.CASH) {
-        totalAvailable += balance;
+        totalFromAccounts += balance;
+        accountIds.push(account.id);
       }
     }
 
-    return totalAvailable;
+    // Add income transactions (transactions with null category_id represent Ready to Assign income)
+    if (accountIds.length > 0) {
+      const { data: incomeTransactions, error: incomeError } = await supabase
+        .from('transactions')
+        .select('amount')
+        .is('category_id', null) // Ready to Assign transactions have null category_id
+        .in('account_id', accountIds)
+        .eq('user_id', userId);
+
+      if (incomeError) {
+        throw new Error(incomeError.message);
+      }
+
+      let totalIncome = 0;
+      for (const transaction of incomeTransactions || []) {
+        totalIncome += transaction.amount || 0;
+      }
+
+      return totalFromAccounts + totalIncome;
+    }
+
+    return totalFromAccounts;
   }
 
   private async calculateTotalAssignedMoney(supabase: SupabaseClient, budgetId: string, userId: string): Promise<number> {
