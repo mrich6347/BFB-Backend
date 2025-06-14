@@ -12,8 +12,8 @@ export interface TestScenario {
 }
 
 export interface TestStep {
-  action: 'create_budget' | 'create_account' | 'create_category_group' | 'create_category' | 
-          'create_transaction' | 'delete_transaction' | 'assign_money' | 'get_state';
+  action: 'create_budget' | 'create_account' | 'create_category_group' | 'create_category' |
+          'create_transaction' | 'delete_transaction' | 'update_transaction' | 'delete_category' | 'assign_money' | 'get_state';
   description: string;
   params: any;
   expectedResult?: any;
@@ -123,6 +123,10 @@ export class YnabTestRunner {
           return await this.createTransaction(step.params);
         case 'delete_transaction':
           return await this.deleteTransaction(step.params);
+        case 'update_transaction':
+          return await this.updateTransaction(step.params);
+        case 'delete_category':
+          return await this.deleteCategory(step.params);
         case 'assign_money':
           return await this.assignMoney(step.params);
         case 'get_state':
@@ -249,6 +253,46 @@ export class YnabTestRunner {
       return { success: true, data: response.body };
     }
     return { success: false, error: response.body.message || 'Failed to delete transaction' };
+  }
+
+  private async updateTransaction(params: any): Promise<StepResult> {
+    const transactionId = this.testData.transactions[params.payee];
+    const response = await request(this.app.getHttpServer())
+      .patch(`/transactions/${transactionId}`)
+      .set('Authorization', `Bearer ${this.authToken}`)
+      .send({ amount: params.amount });
+
+    if (response.status === 200) {
+      return { success: true, data: response.body };
+    }
+    return { success: false, error: response.body.message || 'Failed to update transaction' };
+  }
+
+  private async deleteCategory(params: any): Promise<StepResult> {
+    // Find category ID by name from the current state (same approach as other methods)
+    let categoryId = null;
+    if (params.category_name) {
+      const currentState = await this.getCurrentState();
+      const category = currentState.categories.find(c => c.name === params.category_name);
+      if (category) {
+        categoryId = category.id;
+      } else {
+        return { success: false, error: `Category '${params.category_name}' not found` };
+      }
+    }
+
+    const response = await request(this.app.getHttpServer())
+      .delete(`/categories/${categoryId}`)
+      .set('Authorization', `Bearer ${this.authToken}`);
+
+    if (response.status === 200) {
+      // Remove from testData if it was stored there
+      if (this.testData.categories && this.testData.categories[params.category_name]) {
+        delete this.testData.categories[params.category_name];
+      }
+      return { success: true, data: response.body };
+    }
+    return { success: false, error: response.body.message || 'Failed to delete category' };
   }
 
   private async assignMoney(params: any): Promise<StepResult> {
