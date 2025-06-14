@@ -47,6 +47,22 @@ export class CategoryGroupsService {
   async update(id: string, updateCategoryGroupDto: UpdateCategoryGroupDto, userId: string, authToken: string): Promise<CategoryGroupResponse> {
     const supabase = this.supabaseService.getAuthenticatedClient(authToken);
 
+    // Check if this is a system group and prevent editing
+    const { data: groupData, error: fetchError } = await supabase
+      .from('category_groups')
+      .select('is_system_group')
+      .eq('id', id)
+      .eq('user_id', userId)
+      .single();
+
+    if (fetchError) {
+      throw new Error(fetchError.message);
+    }
+
+    if (groupData.is_system_group) {
+      throw new Error('System category groups cannot be edited');
+    }
+
     const { data, error } = await supabase
       .from('category_groups')
       .update(updateCategoryGroupDto)
@@ -64,6 +80,22 @@ export class CategoryGroupsService {
 
   async remove(id: string, userId: string, authToken: string): Promise<void> {
     const supabase = this.supabaseService.getAuthenticatedClient(authToken);
+
+    // Check if this is a system group and prevent deletion
+    const { data: groupData, error: fetchError } = await supabase
+      .from('category_groups')
+      .select('is_system_group')
+      .eq('id', id)
+      .eq('user_id', userId)
+      .single();
+
+    if (fetchError) {
+      throw new Error(fetchError.message);
+    }
+
+    if (groupData.is_system_group) {
+      throw new Error('System category groups cannot be deleted');
+    }
 
     const { error } = await supabase
       .from('category_groups')

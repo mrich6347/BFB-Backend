@@ -13,6 +13,22 @@ export class CategoriesService {
   async create(createCategoryDto: CreateCategoryDto, userId: string, authToken: string): Promise<CategoryWithReadyToAssignResponse> {
     const supabase = this.supabaseService.getAuthenticatedClient(authToken);
 
+    // Check if the target category group is a system group and prevent manual category creation
+    const { data: groupData, error: groupError } = await supabase
+      .from('category_groups')
+      .select('is_system_group, name')
+      .eq('id', createCategoryDto.category_group_id)
+      .eq('user_id', userId)
+      .single();
+
+    if (groupError) {
+      throw new Error(groupError.message);
+    }
+
+    if (groupData.is_system_group) {
+      throw new Error(`Cannot manually add categories to the "${groupData.name}" group`);
+    }
+
     const payload = {
       ...createCategoryDto,
       user_id: userId
