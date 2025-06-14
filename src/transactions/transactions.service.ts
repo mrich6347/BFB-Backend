@@ -18,11 +18,16 @@ export class TransactionsService {
   async create(createTransactionDto: CreateTransactionDto, userId: string, authToken: string): Promise<TransactionResponse> {
     const supabase = this.supabaseService.getAuthenticatedClient(authToken);
 
+    // Handle special "ready-to-assign" category
+    const isReadyToAssign = createTransactionDto.category_id === 'ready-to-assign';
+
     const payload = {
       ...createTransactionDto,
       user_id: userId,
       is_cleared: createTransactionDto.is_cleared ?? false,
       is_reconciled: createTransactionDto.is_reconciled ?? false,
+      // Store null for ready-to-assign transactions
+      category_id: isReadyToAssign ? null : createTransactionDto.category_id,
     };
 
     const { data, error } = await supabase
@@ -35,8 +40,8 @@ export class TransactionsService {
       throw new Error(error.message);
     }
 
-    // Update category activity if transaction has a category
-    if (data.category_id && data.amount !== 0) {
+    // Update category activity if transaction has a category (but not for ready-to-assign)
+    if (data.category_id && data.amount !== 0 && !isReadyToAssign) {
       const budgetId = await this.getBudgetIdFromAccount(data.account_id, userId, authToken);
 
       if (budgetId) {
@@ -158,10 +163,21 @@ export class TransactionsService {
       throw new Error(fetchError.message);
     }
 
+    // Handle special "ready-to-assign" category
+    const isReadyToAssign = updateTransactionDto.category_id === 'ready-to-assign';
+    const wasReadyToAssign = originalTransaction.category_id === null;
+
+    // Prepare update payload
+    const updatePayload = {
+      ...updateTransactionDto,
+      // Store null for ready-to-assign transactions
+      category_id: isReadyToAssign ? null : updateTransactionDto.category_id,
+    };
+
     // Update the transaction
     const { data, error } = await supabase
       .from('transactions')
-      .update(updateTransactionDto)
+      .update(updatePayload)
       .eq('id', id)
       .eq('user_id', userId)
       .select('*')
@@ -181,8 +197,8 @@ export class TransactionsService {
         const amountChanged = originalTransaction.amount !== data.amount;
         const dateChanged = originalTransaction.date !== data.date;
 
-        // If category changed, reverse activity from old category
-        if (categoryChanged && originalTransaction.category_id && originalTransaction.amount !== 0) {
+        // If category changed, reverse activity from old category (but not if it was ready-to-assign)
+        if (categoryChanged && originalTransaction.category_id && originalTransaction.amount !== 0 && !wasReadyToAssign) {
           await this.updateCategoryActivity(
             originalTransaction.category_id,
             budgetId,
@@ -193,8 +209,8 @@ export class TransactionsService {
           );
         }
 
-        // If amount changed but category stayed the same, adjust the difference
-        if (!categoryChanged && amountChanged && data.category_id && originalTransaction.category_id) {
+        // If amount changed but category stayed the same, adjust the difference (but not for ready-to-assign)
+        if (!categoryChanged && amountChanged && data.category_id && originalTransaction.category_id && !isReadyToAssign && !wasReadyToAssign) {
           const amountDifference = data.amount - originalTransaction.amount;
           const dateToUse = dateChanged ? data.date : originalTransaction.date;
 
@@ -208,8 +224,8 @@ export class TransactionsService {
           );
         }
 
-        // If category changed to a new category, add activity to new category
-        if (categoryChanged && data.category_id && data.amount !== 0) {
+        // If category changed to a new category, add activity to new category (but not for ready-to-assign)
+        if (categoryChanged && data.category_id && data.amount !== 0 && !isReadyToAssign) {
           await this.updateCategoryActivity(
             data.category_id,
             budgetId,
@@ -220,8 +236,8 @@ export class TransactionsService {
           );
         }
 
-        // If date changed but category and amount stayed the same, we need to move the activity
-        if (dateChanged && !categoryChanged && !amountChanged && data.category_id && data.amount !== 0) {
+        // If date changed but category and amount stayed the same, we need to move the activity (but not for ready-to-assign)
+        if (dateChanged && !categoryChanged && !amountChanged && data.category_id && data.amount !== 0 && !isReadyToAssign && !wasReadyToAssign) {
           // Remove from old date
           await this.updateCategoryActivity(
             data.category_id,
@@ -290,8 +306,9 @@ export class TransactionsService {
       throw new Error(error.message);
     }
 
-    // Reverse category activity if transaction had a category
-    if (transaction.category_id && transaction.amount !== 0) {
+    // Reverse category activity if transaction had a category (but not for ready-to-assign)
+    const wasReadyToAssign = transaction.category_id === null;
+    if (transaction.category_id && transaction.amount !== 0 && !wasReadyToAssign) {
       const budgetId = await this.getBudgetIdFromAccount(transaction.account_id, userId, authToken);
 
       if (budgetId) {

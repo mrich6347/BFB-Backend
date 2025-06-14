@@ -20,7 +20,6 @@ export class CreateTransactionDto {
   payee?: string;
 
   @IsString()
-  @IsUUID()
   @IsOptional()
   category_id?: string;
 
@@ -56,7 +55,6 @@ export class UpdateTransactionDto {
   payee?: string;
 
   @IsString()
-  @IsUUID()
   @IsOptional()
   category_id?: string;
 
