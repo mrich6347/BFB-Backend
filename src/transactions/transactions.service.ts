@@ -48,19 +48,17 @@ export class TransactionsService {
 
       if (budgetId) {
         try {
-          await this.updateCategoryActivity(
-            data.category_id,
-            budgetId,
-            data.date,
-            data.amount,
-            userId,
-            authToken
-          );
-
-          // Handle credit card spending logic
+          // Handle credit card spending logic FIRST (before updating activity)
+          // This is crucial because we need to see the available balance before the transaction affects it
+          console.log(`🔍 Checking if account ${data.account_id} is a credit card...`);
           const isCreditCard = await this.isCreditCardTransaction(data.account_id, userId, authToken);
+          console.log(`🔍 Is credit card: ${isCreditCard}`);
+          console.log(`🔍 Transaction amount: ${data.amount} (negative = spending)`);
+
+          let isCreditCardSpending = false;
           if (isCreditCard && data.amount < 0) { // Negative amount = spending
-            console.log('🏦 Processing credit card spending transaction');
+            console.log('🏦 ========== CREDIT CARD TRANSACTION DETECTED ==========');
+            console.log('🏦 Processing credit card spending transaction BEFORE updating activity');
             await this.handleCreditCardSpending(
               data,
               data.category_id,
@@ -70,7 +68,39 @@ export class TransactionsService {
               userId,
               authToken
             );
+            console.log('🏦 ========== CREDIT CARD PROCESSING COMPLETE ==========');
+            isCreditCardSpending = true;
+          } else {
+            console.log('ℹ️ Not a credit card spending transaction - skipping credit card logic');
           }
+
+          // For credit card spending, we need to update the original category's activity
+          // but we do it AFTER the money transfer logic has run
+          // We use a special method that ONLY updates activity (not available balance)
+          if (isCreditCardSpending) {
+            console.log(`🔄 Updating ONLY activity for credit card transaction ${data.id}`);
+            await this.updateCategoryActivityOnly(
+              data.category_id,
+              budgetId,
+              data.date,
+              data.amount,
+              userId,
+              authToken
+            );
+            console.log(`✅ Credit card category activity updated (available balance handled by transfer)`);
+          } else {
+            console.log(`🔄 Updating category activity for transaction ${data.id}`);
+            await this.updateCategoryActivity(
+              data.category_id,
+              budgetId,
+              data.date,
+              data.amount,
+              userId,
+              authToken
+            );
+            console.log(`✅ Category activity updated`);
+          }
+
         } catch (activityError) {
           console.error('Error updating category activity or credit card logic:', activityError);
           // Don't throw here - transaction was created successfully, activity update is secondary
@@ -437,6 +467,49 @@ export class TransactionsService {
   }
 
   /**
+   * Helper method to update ONLY category activity for credit card transactions
+   * This method only updates activity and does NOT touch available balance
+   * (available balance is handled separately by credit card transfer logic)
+   */
+  private async updateCategoryActivityOnly(
+    categoryId: string,
+    budgetId: string,
+    transactionDate: string,
+    amount: number,
+    userId: string,
+    authToken: string
+  ): Promise<void> {
+    // Validate transaction date - no future transactions allowed
+    const transactionDateObj = new Date(transactionDate);
+    const today = new Date();
+    today.setHours(23, 59, 59, 999); // End of today
+
+    if (transactionDateObj > today) {
+      throw new Error('Future transactions are not allowed');
+    }
+
+    // Extract year and month from transaction date for activity tracking
+    const transactionYear = transactionDateObj.getFullYear();
+    const transactionMonth = transactionDateObj.getMonth() + 1;
+
+    console.log(`🔄 Updating ONLY activity for category ${categoryId} in ${transactionYear}-${transactionMonth} by ${amount}`);
+
+    // Update ONLY activity for the transaction's actual month
+    await this.updateCategoryBalance(
+      categoryId,
+      budgetId,
+      transactionYear,
+      transactionMonth,
+      amount,
+      'activity',
+      userId,
+      authToken
+    );
+
+    console.log(`✅ Activity-only update complete`);
+  }
+
+  /**
    * Helper method to update category activity for a transaction
    * New logic:
    * - Activity: Update for the transaction's actual month (historical accuracy)
@@ -691,7 +764,13 @@ export class TransactionsService {
     userId: string,
     authToken: string
   ): Promise<void> {
-    console.log(`🏦 Handling credit card spending: ${amount} for transaction ${transaction.id}`);
+    console.log(`🏦 ========== CREDIT CARD SPENDING HANDLER START ==========`);
+    console.log(`🏦 Transaction ID: ${transaction.id}`);
+    console.log(`🏦 Category ID: ${categoryId}`);
+    console.log(`🏦 Budget ID: ${budgetId}`);
+    console.log(`🏦 Transaction Date: ${transactionDate}`);
+    console.log(`🏦 Amount: ${amount} (negative = spending)`);
+    console.log(`🏦 User ID: ${userId}`);
 
     // Find the payment category for this credit card
     const paymentCategoryId = await this.findPaymentCategoryForCreditCard(transaction.account_id, userId, authToken);
@@ -707,9 +786,10 @@ export class TransactionsService {
     const transactionYear = transactionDateObj.getFullYear();
     const transactionMonth = transactionDateObj.getMonth() + 1;
 
-    console.log(`📅 Transaction date: ${transactionYear}-${transactionMonth}`);
+    console.log(`📅 Transaction date parsed: ${transactionYear}-${transactionMonth}`);
 
     // Get current available balance for the spending category (for transaction month)
+    console.log(`🔍 Looking up category balance for category ${categoryId} in ${transactionYear}-${transactionMonth}`);
     const categoryBalance = await this.categoryBalancesService.findByCategory(
       categoryId,
       transactionYear,
@@ -718,7 +798,7 @@ export class TransactionsService {
       authToken
     );
 
-    console.log(`💰 Category balance for ${categoryId}:`, categoryBalance);
+    console.log(`💰 Raw category balance result:`, JSON.stringify(categoryBalance, null, 2));
 
     const availableBalance = categoryBalance?.available || 0;
     const spendingAmount = Math.abs(amount); // Convert to positive for calculations
@@ -727,11 +807,18 @@ export class TransactionsService {
     const coveredAmount = Math.max(0, Math.min(availableBalance, spendingAmount));
     const debtAmount = spendingAmount;
 
-    console.log(`💳 Spending: ${spendingAmount}, Available: ${availableBalance}, Covered: ${coveredAmount}`);
+    console.log(`💳 CALCULATION SUMMARY:`);
+    console.log(`💳   Spending Amount: ${spendingAmount}`);
+    console.log(`💳   Available Balance: ${availableBalance}`);
+    console.log(`💳   Covered Amount: ${coveredAmount}`);
+    console.log(`💳   Debt Amount: ${debtAmount}`);
 
     // Transfer covered amount to payment category (if any)
     if (coveredAmount > 0) {
-      console.log(`💸 Transferring ${coveredAmount} to payment category ${paymentCategoryId}`);
+      console.log(`💸 ========== MONEY TRANSFER START ==========`);
+      console.log(`💸 Transferring ${coveredAmount} from category ${categoryId} to payment category ${paymentCategoryId}`);
+      console.log(`💸 Transfer details: year=${transactionYear}, month=${transactionMonth}`);
+
       await this.transferMoneyToPaymentCategory(
         categoryId,
         paymentCategoryId,
@@ -743,13 +830,21 @@ export class TransactionsService {
         authToken
       );
       console.log(`✅ Transfer complete`);
+      console.log(`💸 ========== MONEY TRANSFER END ==========`);
     } else {
       console.log(`ℹ️ No money to transfer (covered amount = 0)`);
     }
 
     // ALWAYS create debt tracking record for credit card transactions
     // This ensures we can properly reverse the transaction when deleted
-    console.log(`📝 Creating debt tracking record: debt=${debtAmount}, covered=${coveredAmount}`);
+    console.log(`📝 ========== DEBT TRACKING RECORD START ==========`);
+    console.log(`📝 Creating debt tracking record:`);
+    console.log(`📝   Transaction ID: ${transaction.id}`);
+    console.log(`📝   Category ID: ${categoryId}`);
+    console.log(`📝   Payment Category ID: ${paymentCategoryId}`);
+    console.log(`📝   Debt Amount: ${debtAmount}`);
+    console.log(`📝   Covered Amount: ${coveredAmount}`);
+    console.log(`📝   Budget ID: ${budgetId}`);
 
     await this.debtTrackingService.createDebtRecord(
       transaction.id,
@@ -762,15 +857,17 @@ export class TransactionsService {
       authToken
     );
 
+    console.log(`📝 ========== DEBT TRACKING RECORD END ==========`);
+
     if (coveredAmount >= spendingAmount) {
-      console.log(`✅ Fully covered spending of ${spendingAmount}`);
+      console.log(`✅ RESULT: Fully covered spending of ${spendingAmount}`);
     } else if (coveredAmount > 0) {
-      console.log(`⚠️ Partially covered spending. Covered: ${coveredAmount}, Remaining debt: ${debtAmount - coveredAmount}`);
+      console.log(`⚠️ RESULT: Partially covered spending. Covered: ${coveredAmount}, Remaining debt: ${debtAmount - coveredAmount}`);
     } else {
-      console.log(`⚠️ Uncovered spending. Full debt: ${debtAmount}`);
+      console.log(`⚠️ RESULT: Uncovered spending. Full debt: ${debtAmount}`);
     }
 
-
+    console.log(`🏦 ========== CREDIT CARD SPENDING HANDLER END ==========`);
   }
 
   /**
@@ -849,7 +946,7 @@ export class TransactionsService {
           authToken
         );
 
-        // Also reverse the activity in the original category since the transaction is being deleted
+        // Reverse the activity in the original category since the transaction is being deleted
         // Activity should be reversed for the transaction's original month, not current month
         const transactionDateObj = new Date(transactionDate);
         const transactionYear = transactionDateObj.getFullYear();
@@ -893,20 +990,35 @@ export class TransactionsService {
     userId: string,
     authToken: string
   ): Promise<void> {
-    console.log(`💸 Transferring ${amount} from category ${fromCategoryId} to payment category ${toCategoryId}`);
+    console.log(`💸 ========== TRANSFER MONEY TO PAYMENT CATEGORY START ==========`);
+    console.log(`💸 From Category: ${fromCategoryId}`);
+    console.log(`💸 To Payment Category: ${toCategoryId}`);
+    console.log(`💸 Budget ID: ${budgetId}`);
+    console.log(`💸 Amount: ${amount}`);
+    console.log(`💸 Transaction Year/Month: ${year}/${month}`);
+    console.log(`💸 User ID: ${userId}`);
 
-    // Decrease available balance in spending category
-    await this.updateCategoryBalance(fromCategoryId, budgetId, year, month, -amount, 'available', userId, authToken);
-
-    // Increase available balance in payment category (current month)
     const currentDate = new Date();
     const currentYear = currentDate.getFullYear();
     const currentMonth = currentDate.getMonth() + 1;
+    console.log(`💸 Current Year/Month: ${currentYear}/${currentMonth}`);
 
+    // Step 1: Decrease available balance in spending category (transaction month)
+    console.log(`💸 STEP 1: Decreasing available balance in spending category ${fromCategoryId} by ${amount} for ${year}/${month}`);
+    await this.updateCategoryBalance(fromCategoryId, budgetId, year, month, -amount, 'available', userId, authToken);
+    console.log(`💸 STEP 1: Complete`);
+
+    // Step 2: Increase available balance in payment category (current month)
+    console.log(`💸 STEP 2: Increasing available balance in payment category ${toCategoryId} by ${amount} for ${currentYear}/${currentMonth}`);
     await this.updateCategoryBalance(toCategoryId, budgetId, currentYear, currentMonth, amount, 'available', userId, authToken);
+    console.log(`💸 STEP 2: Complete`);
 
-    // Add activity to payment category (current month) - this is key for YNAB behavior
+    // Step 3: Add activity to payment category (current month) - this is key for YNAB behavior
+    console.log(`💸 STEP 3: Adding activity to payment category ${toCategoryId} by ${amount} for ${currentYear}/${currentMonth}`);
     await this.updateCategoryBalance(toCategoryId, budgetId, currentYear, currentMonth, amount, 'activity', userId, authToken);
+    console.log(`💸 STEP 3: Complete`);
+
+    console.log(`💸 ========== TRANSFER MONEY TO PAYMENT CATEGORY END ==========`);
   }
 
 
@@ -924,8 +1036,15 @@ export class TransactionsService {
     userId: string,
     authToken: string
   ): Promise<void> {
-    console.log(`💰 Updating category ${categoryId} ${field} by ${amount} for ${year}-${month}`);
+    console.log(`💰 ========== UPDATE CATEGORY BALANCE START ==========`);
+    console.log(`💰 Category ID: ${categoryId}`);
+    console.log(`💰 Budget ID: ${budgetId}`);
+    console.log(`💰 Year/Month: ${year}/${month}`);
+    console.log(`💰 Amount: ${amount}`);
+    console.log(`💰 Field: ${field}`);
+    console.log(`💰 User ID: ${userId}`);
 
+    console.log(`💰 Fetching existing balance...`);
     const existingBalance = await this.categoryBalancesService.findByCategory(
       categoryId,
       year,
@@ -934,7 +1053,7 @@ export class TransactionsService {
       authToken
     );
 
-    console.log(`💰 Existing balance for category ${categoryId}:`, existingBalance);
+    console.log(`💰 Existing balance result:`, JSON.stringify(existingBalance, null, 2));
 
     if (existingBalance) {
       const oldValue = existingBalance[field] || 0;
@@ -943,7 +1062,11 @@ export class TransactionsService {
         [field]: newValue
       };
 
-      console.log(`💰 Updating ${field}: ${oldValue} + ${amount} = ${newValue}`);
+      console.log(`💰 UPDATING EXISTING RECORD:`);
+      console.log(`💰   Old ${field}: ${oldValue}`);
+      console.log(`💰   Change: ${amount}`);
+      console.log(`💰   New ${field}: ${newValue}`);
+      console.log(`💰   Update data:`, JSON.stringify(updateData, null, 2));
 
       await this.categoryBalancesService.updateByCategoryAndMonth(
         categoryId,
@@ -953,6 +1076,7 @@ export class TransactionsService {
         userId,
         authToken
       );
+      console.log(`💰 Update complete`);
     } else {
       // Create new balance record
       const balanceData = {
@@ -962,7 +1086,8 @@ export class TransactionsService {
         [field]: amount
       };
 
-      console.log(`💰 Creating new balance record for category ${categoryId} with ${field} = ${amount}`);
+      console.log(`💰 CREATING NEW BALANCE RECORD:`);
+      console.log(`💰   Balance data:`, JSON.stringify(balanceData, null, 2));
 
       await this.categoryBalancesService.createOrUpdateByCategoryAndMonth(
         categoryId,
@@ -973,7 +1098,10 @@ export class TransactionsService {
         userId,
         authToken
       );
+      console.log(`💰 Creation complete`);
     }
+
+    console.log(`💰 ========== UPDATE CATEGORY BALANCE END ==========`);
   }
 
   /**
@@ -1047,9 +1175,22 @@ export class TransactionsService {
     userId: string,
     authToken: string
   ): Promise<void> {
-    console.log(`🔄 Handling cross-month debt coverage: ${coverageAmount} to payment category ${debtRecord.payment_category_id}`);
+    console.log(`🔄 Handling cross-month debt coverage: ${coverageAmount} from category ${debtRecord.category_id} to payment category ${debtRecord.payment_category_id}`);
 
-    // Add money to the payment category's available balance for CURRENT month
+    // FIRST: Remove money from the spending category's available balance (current month)
+    // This is crucial - when debt is covered, the money must be moved FROM the spending category
+    await this.updateCategoryBalance(
+      debtRecord.category_id,
+      debtRecord.budget_id,
+      currentYear,
+      currentMonth,
+      -coverageAmount,
+      'available',
+      userId,
+      authToken
+    );
+
+    // THEN: Add money to the payment category's available balance for CURRENT month
     await this.updateCategoryBalance(
       debtRecord.payment_category_id,
       debtRecord.budget_id,

@@ -264,6 +264,9 @@ export class CategoriesService {
 
         // Handle debt coverage if money was added to the category
         if (assignedDifference > 0) {
+          console.log(`💰 ========== DEBT COVERAGE TRIGGER ==========`);
+          console.log(`💰 Category ${id} assigned amount increased by ${assignedDifference}`);
+          console.log(`💰 Checking for uncovered debt to cover...`);
           try {
             await this.handleDebtCoverageForCategory(
               id,
@@ -271,10 +274,12 @@ export class CategoriesService {
               userId,
               authToken
             );
+            console.log(`💰 Debt coverage handling complete`);
           } catch (debtError) {
             console.error('Error handling debt coverage:', debtError);
             // Don't throw here - category update was successful, debt coverage is secondary
           }
+          console.log(`💰 ========== DEBT COVERAGE END ==========`);
         }
 
         // Simplified: Only update current month (no future month cascading)
@@ -941,23 +946,39 @@ export class CategoriesService {
   ): Promise<void> {
     if (assignedAmountIncrease <= 0) return;
 
-    console.log(`💰 Attempting to cover debt for category ${categoryId} with ${assignedAmountIncrease}`);
+    console.log(`💰 ========== HANDLE DEBT COVERAGE FOR CATEGORY START ==========`);
+    console.log(`💰 Category ID: ${categoryId}`);
+    console.log(`💰 Assigned Amount Increase: ${assignedAmountIncrease}`);
+    console.log(`💰 User ID: ${userId}`);
 
     // Get all uncovered debt records for this category using the debt tracking service
+    console.log(`💰 Fetching uncovered debts for category ${categoryId}...`);
     const uncoveredDebts = await this.debtTrackingService.getUncoveredDebts(categoryId, userId, authToken);
+    console.log(`💰 Found ${uncoveredDebts.length} uncovered debt records:`, JSON.stringify(uncoveredDebts, null, 2));
 
     if (uncoveredDebts.length === 0) {
-      console.log('No uncovered debt found for category');
+      console.log('💰 No uncovered debt found for category - nothing to cover');
+      console.log(`💰 ========== HANDLE DEBT COVERAGE FOR CATEGORY END ==========`);
       return;
     }
 
     let remainingAmount = assignedAmountIncrease;
+    console.log(`💰 Starting debt coverage with ${remainingAmount} available`);
 
     for (const debtRecord of uncoveredDebts) {
-      if (remainingAmount <= 0) break;
+      if (remainingAmount <= 0) {
+        console.log(`💰 No remaining amount to cover debt - stopping`);
+        break;
+      }
 
       const uncoveredDebt = debtRecord.debt_amount - debtRecord.covered_amount;
       const coverageAmount = Math.min(remainingAmount, uncoveredDebt);
+
+      console.log(`💰 Processing debt record ${debtRecord.id}:`);
+      console.log(`💰   Debt Amount: ${debtRecord.debt_amount}`);
+      console.log(`💰   Already Covered: ${debtRecord.covered_amount}`);
+      console.log(`💰   Uncovered Debt: ${uncoveredDebt}`);
+      console.log(`💰   Coverage Amount: ${coverageAmount}`);
 
       if (coverageAmount > 0) {
         console.log(`📝 Covering ${coverageAmount} of debt record ${debtRecord.id}`);
@@ -965,24 +986,29 @@ export class CategoriesService {
         // Update the debt record using the service
         try {
           await this.debtTrackingService.updateDebtCoverage(debtRecord.id, coverageAmount, userId, authToken);
+          console.log(`📝 Debt record updated successfully`);
         } catch (updateError) {
           console.error('Error updating debt record:', updateError);
           continue;
         }
 
         // Transfer money to payment category (current month)
+        console.log(`💸 Initiating cross-month debt coverage transfer...`);
         await this.handleCrossMonthDebtCoverage(
           debtRecord,
           coverageAmount,
           userId,
           authToken
         );
+        console.log(`💸 Cross-month debt coverage transfer complete`);
 
         remainingAmount -= coverageAmount;
+        console.log(`💰 Remaining amount after coverage: ${remainingAmount}`);
       }
     }
 
-    console.log(`✅ Debt coverage complete. Remaining amount: ${remainingAmount}`);
+    console.log(`✅ Debt coverage complete. Final remaining amount: ${remainingAmount}`);
+    console.log(`💰 ========== HANDLE DEBT COVERAGE FOR CATEGORY END ==========`);
   }
 
   /**
@@ -994,13 +1020,26 @@ export class CategoriesService {
     userId: string,
     authToken: string
   ): Promise<void> {
-    console.log(`🔄 Handling cross-month debt coverage: ${coverageAmount} to payment category ${debtRecord.payment_category_id}`);
+    console.log(`🔄 Handling cross-month debt coverage: ${coverageAmount} from category ${debtRecord.category_id} to payment category ${debtRecord.payment_category_id}`);
 
     const currentDate = new Date();
     const currentYear = currentDate.getFullYear();
     const currentMonth = currentDate.getMonth() + 1;
 
-    // Add money to the payment category's available balance for CURRENT month
+    // FIRST: Remove money from the spending category's available balance (current month)
+    // This is crucial - when debt is covered, the money must be moved FROM the spending category
+    await this.updateCategoryBalance(
+      debtRecord.category_id,
+      debtRecord.budget_id,
+      currentYear,
+      currentMonth,
+      -coverageAmount,
+      'available',
+      userId,
+      authToken
+    );
+
+    // THEN: Add money to the payment category's available balance for CURRENT month
     await this.updateCategoryBalance(
       debtRecord.payment_category_id,
       debtRecord.budget_id,
