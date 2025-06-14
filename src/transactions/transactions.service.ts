@@ -312,37 +312,18 @@ export class TransactionsService {
       throw new Error(fetchError.message);
     }
 
-    // Delete the transaction
-    const { error } = await supabase
-      .from('transactions')
-      .delete()
-      .eq('id', id)
-      .eq('user_id', userId);
-
-    if (error) {
-      throw new Error(error.message);
-    }
-
-    // Reverse category activity if transaction had a category (but not for ready-to-assign)
+    // IMPORTANT: Handle credit card reversal BEFORE deleting transaction
+    // This is because debt records have ON DELETE CASCADE and will be deleted automatically
     const wasReadyToAssign = transaction.category_id === null;
     if (transaction.category_id && transaction.amount !== 0 && !wasReadyToAssign) {
       const budgetId = await this.getBudgetIdFromAccount(transaction.account_id, userId, authToken);
 
       if (budgetId) {
         try {
-          await this.updateCategoryActivity(
-            transaction.category_id,
-            budgetId,
-            transaction.date,
-            -transaction.amount, // Reverse the amount
-            userId,
-            authToken
-          );
-
-          // Handle credit card transaction deletion
+          // Handle credit card transaction deletion FIRST (before deleting transaction)
           const isCreditCard = await this.isCreditCardTransaction(transaction.account_id, userId, authToken);
           if (isCreditCard && transaction.amount < 0) { // Was a spending transaction
-            console.log('🏦 Reversing credit card spending transaction');
+            console.log('🏦 Reversing credit card spending transaction BEFORE deletion');
             await this.reverseCreditCardSpending(
               transaction.id,
               transaction.category_id,
@@ -353,11 +334,32 @@ export class TransactionsService {
               authToken
             );
           }
+
+          // Then reverse category activity
+          await this.updateCategoryActivity(
+            transaction.category_id,
+            budgetId,
+            transaction.date,
+            -transaction.amount, // Reverse the amount
+            userId,
+            authToken
+          );
         } catch (activityError) {
           console.error('Error reversing category activity or credit card logic:', activityError);
-          // Don't throw here - transaction was deleted successfully, activity update is secondary
+          // Don't throw here - we still want to delete the transaction
         }
       }
+    }
+
+    // NOW delete the transaction (debt records will be automatically deleted due to CASCADE)
+    const { error } = await supabase
+      .from('transactions')
+      .delete()
+      .eq('id', id)
+      .eq('user_id', userId);
+
+    if (error) {
+      throw new Error(error.message);
     }
 
     // Update account balances after deleting transaction
@@ -684,19 +686,23 @@ export class TransactionsService {
     userId: string,
     authToken: string
   ): Promise<void> {
-    console.log(`🏦 Handling credit card spending: ${amount} for category ${categoryId}`);
+    console.log(`🏦 Handling credit card spending: ${amount} for transaction ${transaction.id}`);
 
     // Find the payment category for this credit card
     const paymentCategoryId = await this.findPaymentCategoryForCreditCard(transaction.account_id, userId, authToken);
     if (!paymentCategoryId) {
-      console.error('No payment category found for credit card account:', transaction.account_id);
+      console.error('❌ No payment category found for credit card account:', transaction.account_id);
       return;
     }
+
+    console.log(`💳 Found payment category: ${paymentCategoryId}`);
 
     // Get transaction month/year
     const transactionDateObj = new Date(transactionDate);
     const transactionYear = transactionDateObj.getFullYear();
     const transactionMonth = transactionDateObj.getMonth() + 1;
+
+    console.log(`📅 Transaction date: ${transactionYear}-${transactionMonth}`);
 
     // Get current available balance for the spending category (for transaction month)
     const categoryBalance = await this.categoryBalancesService.findByCategory(
@@ -707,55 +713,68 @@ export class TransactionsService {
       authToken
     );
 
+    console.log(`💰 Category balance for ${categoryId}:`, categoryBalance);
+
     const availableBalance = categoryBalance?.available || 0;
     const spendingAmount = Math.abs(amount); // Convert to positive for calculations
 
-    if (availableBalance >= spendingAmount) {
-      // Sufficient funds: transfer money to payment category
-      console.log(`✅ Sufficient funds (${availableBalance}) for spending ${spendingAmount}`);
+    // Calculate coverage amounts
+    const coveredAmount = Math.max(0, Math.min(availableBalance, spendingAmount));
+    const debtAmount = spendingAmount;
+
+    console.log(`💳 SPENDING CALCULATION:`);
+    console.log(`💳   Spending Amount: ${spendingAmount}`);
+    console.log(`💳   Available Balance: ${availableBalance}`);
+    console.log(`💳   Covered Amount: ${coveredAmount}`);
+    console.log(`💳   Debt Amount: ${debtAmount}`);
+
+    // Transfer covered amount to payment category (if any)
+    if (coveredAmount > 0) {
+      console.log(`💸 Transferring ${coveredAmount} to payment category ${paymentCategoryId}`);
       await this.transferMoneyToPaymentCategory(
         categoryId,
         paymentCategoryId,
         budgetId,
-        spendingAmount,
+        coveredAmount,
         transactionYear,
         transactionMonth,
         userId,
         authToken
       );
+      console.log(`✅ Transfer complete`);
     } else {
-      // Insufficient funds: create debt tracking record
-      const coveredAmount = Math.max(0, availableBalance);
-      const debtAmount = spendingAmount - coveredAmount;
-
-      console.log(`⚠️ Insufficient funds. Available: ${availableBalance}, Spending: ${spendingAmount}, Debt: ${debtAmount}`);
-
-      // Transfer available amount if any
-      if (coveredAmount > 0) {
-        await this.transferMoneyToPaymentCategory(
-          categoryId,
-          paymentCategoryId,
-          budgetId,
-          coveredAmount,
-          transactionYear,
-          transactionMonth,
-          userId,
-          authToken
-        );
-      }
-
-      // Create debt tracking record
-      await this.debtTrackingService.createDebtRecord(
-        transaction.id,
-        categoryId,
-        paymentCategoryId,
-        debtAmount,
-        coveredAmount,
-        budgetId,
-        userId,
-        authToken
-      );
+      console.log(`ℹ️ No money to transfer (covered amount = 0)`);
     }
+
+    // ALWAYS create debt tracking record for credit card transactions
+    // This ensures we can properly reverse the transaction when deleted
+    console.log(`📝 Creating debt tracking record:`);
+    console.log(`📝   Transaction ID: ${transaction.id}`);
+    console.log(`📝   Category ID: ${categoryId}`);
+    console.log(`📝   Payment Category ID: ${paymentCategoryId}`);
+    console.log(`📝   Debt Amount: ${debtAmount}`);
+    console.log(`📝   Covered Amount: ${coveredAmount}`);
+
+    await this.debtTrackingService.createDebtRecord(
+      transaction.id,
+      categoryId,
+      paymentCategoryId,
+      debtAmount,
+      coveredAmount,
+      budgetId,
+      userId,
+      authToken
+    );
+
+    if (coveredAmount >= spendingAmount) {
+      console.log(`✅ Fully covered spending of ${spendingAmount}`);
+    } else if (coveredAmount > 0) {
+      console.log(`⚠️ Partially covered spending. Covered: ${coveredAmount}, Remaining debt: ${debtAmount - coveredAmount}`);
+    } else {
+      console.log(`⚠️ Uncovered spending. Full debt: ${debtAmount}`);
+    }
+
+    console.log(`🏦 ===== CREDIT CARD SPENDING COMPLETE =====`);
   }
 
   /**
@@ -770,11 +789,21 @@ export class TransactionsService {
     userId: string,
     authToken: string
   ): Promise<void> {
-    console.log(`🔄 Reversing credit card spending for transaction ${transactionId}, category ${categoryId}, amount ${amount}`);
+    console.log(`🔄 ===== REVERSING CREDIT CARD SPENDING =====`);
+    console.log(`🔄 Transaction ID: ${transactionId}`);
+    console.log(`🔄 Category ID: ${categoryId}`);
+    console.log(`🔄 Budget ID: ${budgetId}`);
+    console.log(`🔄 Amount: ${amount}`);
+    console.log(`🔄 Transaction Date: ${transactionDate}`);
 
     // Get debt tracking records for this transaction
+    console.log(`🔍 Looking for debt records for transaction ${transactionId}...`);
     const debtRecords = await this.debtTrackingService.getDebtRecordsForTransaction(transactionId, userId, authToken);
-    console.log(`📊 Found ${debtRecords.length} debt records for transaction ${transactionId}:`, debtRecords);
+    console.log(`📊 Found ${debtRecords.length} debt records for transaction ${transactionId}`);
+
+    if (debtRecords.length > 0) {
+      console.log(`📊 Debt records details:`, JSON.stringify(debtRecords, null, 2));
+    }
 
     if (debtRecords.length > 0) {
       const debtRecord = debtRecords[0]; // Should only be one per transaction
@@ -791,15 +820,14 @@ export class TransactionsService {
       const currentYear = currentDate.getFullYear();
       const currentMonth = currentDate.getMonth() + 1;
 
-      // The total amount that was moved to payment category is the covered_amount
-      // This includes both immediate transfers and debt coverage from later assignments
+      // Use the covered_amount from debt record to know how much was actually moved to payment category
       const totalMovedToPayment = debtRecord.covered_amount;
+      const spendingAmount = Math.abs(amount);
+
+      console.log(`🔄 Reversing credit card transaction: original_amount=${spendingAmount}, covered_amount=${totalMovedToPayment}`);
 
       if (totalMovedToPayment > 0) {
-        console.log(`🔄 Reversing ${totalMovedToPayment} from payment category ${debtRecord.payment_category_id} back to spending category ${categoryId}`);
-
-        // Remove money from payment category (current month)
-        console.log(`🔄 Removing ${totalMovedToPayment} available from payment category ${debtRecord.payment_category_id}`);
+        console.log(`🔄 STEP 1: Removing ${totalMovedToPayment} AVAILABLE from payment category ${debtRecord.payment_category_id}`);
         await this.updateCategoryBalance(
           debtRecord.payment_category_id,
           budgetId,
@@ -810,9 +838,9 @@ export class TransactionsService {
           userId,
           authToken
         );
+        console.log(`✅ STEP 1 complete`);
 
-        // Remove activity from payment category (current month)
-        console.log(`🔄 Removing ${totalMovedToPayment} activity from payment category ${debtRecord.payment_category_id}`);
+        console.log(`🔄 STEP 2: Removing ${totalMovedToPayment} ACTIVITY from payment category ${debtRecord.payment_category_id}`);
         await this.updateCategoryBalance(
           debtRecord.payment_category_id,
           budgetId,
@@ -823,9 +851,9 @@ export class TransactionsService {
           userId,
           authToken
         );
+        console.log(`✅ STEP 2 complete`);
 
-        // Put money back into the spending category (current month)
-        // This restores the available balance that was used to cover the debt
+        console.log(`🔄 STEP 3: Adding ${totalMovedToPayment} AVAILABLE back to spending category ${categoryId}`);
         await this.updateCategoryBalance(
           categoryId,
           budgetId,
@@ -836,18 +864,22 @@ export class TransactionsService {
           userId,
           authToken
         );
+        console.log(`✅ STEP 3 complete`);
 
         console.log(`✅ Successfully reversed ${totalMovedToPayment} from payment category to spending category`);
       } else {
-        console.log(`ℹ️ No money to reverse (covered_amount = ${totalMovedToPayment})`);
+        console.log(`ℹ️ No money to reverse (covered_amount = 0) - transaction was not covered`);
       }
 
       // Remove the debt tracking record
       console.log(`🗑️ Removing debt tracking record for transaction ${transactionId}`);
       await this.debtTrackingService.removeDebtRecordsForTransaction(transactionId, userId, authToken);
+      console.log(`✅ Debt tracking record removed`);
     } else {
-      console.log(`ℹ️ No debt records found for transaction ${transactionId} - this might be a fully covered transaction`);
+      console.log(`⚠️ No debt records found for transaction ${transactionId} - this should not happen as all credit card transactions should have debt records`);
     }
+
+    console.log(`🔄 ===== CREDIT CARD SPENDING REVERSAL COMPLETE =====`);
   }
 
   /**
@@ -1027,6 +1059,18 @@ export class TransactionsService {
       currentMonth,
       coverageAmount,
       'available',
+      userId,
+      authToken
+    );
+
+    // Add activity to payment category (current month) - this is key for YNAB behavior
+    await this.updateCategoryBalance(
+      debtRecord.payment_category_id,
+      debtRecord.budget_id,
+      currentYear,
+      currentMonth,
+      coverageAmount,
+      'activity',
       userId,
       authToken
     );

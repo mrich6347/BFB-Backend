@@ -742,6 +742,21 @@ export class CategoriesService {
         throw new Error(createError.message);
       }
     }
+
+    // Handle debt coverage for the destination category
+    // This ensures that if the destination category has uncovered credit card debt,
+    // the money we just moved will be used to cover that debt
+    try {
+      await this.handleDebtCoverageForCategory(
+        destinationCategoryId,
+        amount,
+        userId,
+        authToken
+      );
+    } catch (debtCoverageError) {
+      console.error('Error handling debt coverage in moveMoney:', debtCoverageError);
+      // Don't throw here - the money transfer was successful, debt coverage is secondary
+    }
   }
 
 
@@ -897,6 +912,21 @@ export class CategoriesService {
       if (updateError) {
         throw new Error(updateError.message);
       }
+    }
+
+    // Handle debt coverage for the destination category
+    // This ensures that if the destination category has uncovered credit card debt,
+    // the money we just pulled from Ready to Assign will be used to cover that debt
+    try {
+      await this.handleDebtCoverageForCategory(
+        destinationCategoryId,
+        amount,
+        userId,
+        authToken
+      );
+    } catch (debtCoverageError) {
+      console.error('Error handling debt coverage in pullFromReadyToAssign:', debtCoverageError);
+      // Don't throw here - the money transfer was successful, debt coverage is secondary
     }
   }
 

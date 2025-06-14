@@ -31,26 +31,41 @@ export class DebtTrackingService {
     userId: string,
     authToken: string
   ): Promise<void> {
+    console.log(`📝 ===== CREATING DEBT TRACKING RECORD =====`);
+    console.log(`📝 Transaction ID: ${transactionId}`);
+    console.log(`📝 Category ID: ${categoryId}`);
+    console.log(`📝 Payment Category ID: ${paymentCategoryId}`);
+    console.log(`📝 Debt Amount: ${debtAmount}`);
+    console.log(`📝 Covered Amount: ${coveredAmount}`);
+    console.log(`📝 Budget ID: ${budgetId}`);
+    console.log(`📝 User ID: ${userId}`);
+
     const supabase = this.supabaseService.getAuthenticatedClient(authToken);
-    
-    const { error } = await supabase
+
+    const insertData = {
+      transaction_id: transactionId,
+      category_id: categoryId,
+      payment_category_id: paymentCategoryId,
+      debt_amount: debtAmount,
+      covered_amount: coveredAmount,
+      budget_id: budgetId,
+      user_id: userId
+    };
+
+    console.log(`📝 Insert data:`, insertData);
+
+    const { data, error } = await supabase
       .from('credit_card_debt_tracking')
-      .insert({
-        transaction_id: transactionId,
-        category_id: categoryId,
-        payment_category_id: paymentCategoryId,
-        debt_amount: debtAmount,
-        covered_amount: coveredAmount,
-        budget_id: budgetId,
-        user_id: userId
-      });
+      .insert(insertData)
+      .select('*');
 
     if (error) {
-      console.error('Error creating debt tracking record:', error);
+      console.error('❌ Error creating debt tracking record:', error);
       throw new Error(error.message);
     }
 
-    console.log(`📝 Created debt tracking record: ${debtAmount} debt, ${coveredAmount} covered`);
+    console.log(`✅ Successfully created debt tracking record:`, data);
+    console.log(`📝 ===== DEBT TRACKING RECORD CREATION COMPLETE =====`);
   }
 
   /**
@@ -200,6 +215,10 @@ export class DebtTrackingService {
     userId: string,
     authToken: string
   ): Promise<DebtTrackingRecord[]> {
+    console.log(`🔍 ===== FETCHING DEBT RECORDS FOR TRANSACTION =====`);
+    console.log(`🔍 Transaction ID: ${transactionId}`);
+    console.log(`🔍 User ID: ${userId}`);
+
     const supabase = this.supabaseService.getAuthenticatedClient(authToken);
 
     const { data: debtRecords, error } = await supabase
@@ -209,9 +228,12 @@ export class DebtTrackingService {
       .eq('user_id', userId);
 
     if (error) {
-      console.error('Error fetching debt records for transaction:', error);
+      console.error('❌ Error fetching debt records for transaction:', error);
       return [];
     }
+
+    console.log(`🔍 Found ${debtRecords?.length || 0} debt records:`, debtRecords);
+    console.log(`🔍 ===== DEBT RECORDS FETCH COMPLETE =====`);
 
     return debtRecords || [];
   }
