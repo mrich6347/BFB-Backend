@@ -43,7 +43,7 @@ export class ReadyToAssignService {
     for (const account of accounts || []) {
       const balance = account.account_balance || 0;
 
-      // Only cash accounts are supported now
+      // Only cash accounts contribute to Ready to Assign (tracking accounts are excluded)
       if (account.account_type === AccountType.CASH) {
         totalFromAccounts += balance;
         accountIds.push(account.id);

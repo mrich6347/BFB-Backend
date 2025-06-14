@@ -1,5 +1,6 @@
 export enum AccountType {
-    CASH = 'CASH'
+    CASH = 'CASH',
+    TRACKING = 'TRACKING'
 }
 
 

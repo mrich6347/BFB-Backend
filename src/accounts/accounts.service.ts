@@ -250,6 +250,114 @@ export class AccountsService {
     };
   }
 
+  async updateTrackingBalance(accountId: string, newBalance: number, memo: string, userId: string, authToken: string): Promise<AccountWithReadyToAssignResponse> {
+    const supabase = this.supabaseService.getAuthenticatedClient(authToken);
+
+    // Get the account and verify it's a tracking account
+    const account = await this.findOne(accountId, userId, authToken);
+    if (account.account_type !== 'TRACKING') {
+      throw new Error('Balance updates are only allowed for tracking accounts');
+    }
+
+    const currentBalance = account.working_balance;
+    const adjustmentAmount = newBalance - currentBalance;
+
+    let adjustmentTransaction: TransactionResponse | null = null;
+
+    // If there's a balance change, create an adjustment transaction
+    if (Math.abs(adjustmentAmount) > 0.001) { // Use small epsilon for floating point comparison
+      adjustmentTransaction = await this.transactionsService.create({
+        account_id: accountId,
+        date: new Date().toISOString().split('T')[0], // Today's date
+        amount: adjustmentAmount,
+        memo: memo || `Balance updated to ${newBalance.toFixed(2)}`,
+        payee: 'Balance Update',
+        category_id: undefined, // This will be treated as "Ready to Assign" but won't affect it for tracking accounts
+        is_cleared: true,
+        is_reconciled: false
+      }, userId, authToken);
+    }
+
+    // Update account balance to the new balance
+    const { error: updateError } = await supabase
+      .from('accounts')
+      .update({
+        account_balance: newBalance,
+        cleared_balance: newBalance,
+        working_balance: newBalance
+      })
+      .eq('id', accountId)
+      .eq('user_id', userId);
+
+    if (updateError) {
+      throw new Error(updateError.message);
+    }
+
+    // Get updated account
+    const updatedAccount = await this.findOne(accountId, userId, authToken);
+
+    // Calculate Ready to Assign (should be unchanged since tracking accounts don't affect it)
+    const readyToAssign = await this.readyToAssignService.calculateReadyToAssign(
+      account.budget_id,
+      userId,
+      authToken
+    );
+
+    return {
+      account: updatedAccount,
+      readyToAssign
+    };
+  }
+
+  async getBalanceHistory(accountId: string, userId: string, authToken: string): Promise<any[]> {
+    const supabase = this.supabaseService.getAuthenticatedClient(authToken);
+
+    // Get the account and verify it's a tracking account
+    const account = await this.findOne(accountId, userId, authToken);
+    if (account.account_type !== 'TRACKING') {
+      throw new Error('Balance history is only available for tracking accounts');
+    }
+
+    // Get all transactions for this account, ordered by date
+    const { data: transactions, error } = await supabase
+      .from('transactions')
+      .select('id, date, amount, memo, payee')
+      .eq('account_id', accountId)
+      .eq('user_id', userId)
+      .order('date', { ascending: true })
+      .order('created_at', { ascending: true });
+
+    if (error) {
+      throw new Error(error.message);
+    }
+
+    // Calculate balance history points
+    const balanceHistory: any[] = [];
+
+    // Add starting balance point (account creation)
+    balanceHistory.push({
+      date: transactions && transactions.length > 0 ? transactions[0].date : new Date().toISOString().split('T')[0],
+      balance: account.account_balance || 0,
+      memo: 'Starting balance',
+      transaction_id: null
+    });
+
+    // Add points for each transaction (showing balance after each transaction)
+    let runningBalance = account.account_balance || 0;
+    for (const transaction of transactions || []) {
+      runningBalance += transaction.amount || 0;
+      balanceHistory.push({
+        date: transaction.date,
+        balance: runningBalance,
+        memo: transaction.memo || transaction.payee || 'Balance update',
+        transaction_id: transaction.id
+      });
+    }
+
+    // Return newest first for the list, but chart will sort chronologically
+    return balanceHistory.reverse();
+  }
+
   async reconcileAccount(accountId: string, reconcileDto: ReconcileAccountDto, userId: string, authToken: string): Promise<ReconcileAccountResponse> {
     const supabase = this.supabaseService.getAuthenticatedClient(authToken);
 

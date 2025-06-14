@@ -61,3 +61,20 @@ export class ReconcileAccountResponse {
     adjustmentTransaction?: any; // TransactionResponse type from transactions module
     readyToAssign: number;
 }
+
+export class UpdateTrackingBalanceDto {
+    @Transform(({ value }) => parseFloat(value))
+    @IsNumber()
+    new_balance: number;
+
+    @IsString()
+    @IsOptional()
+    memo?: string;
+}
+
+export class BalanceHistoryPoint {
+    date: string;
+    balance: number;
+    memo?: string;
+    transaction_id?: string;
+}
