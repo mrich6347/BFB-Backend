@@ -44,14 +44,114 @@ class TestCLI {
     }
   }
 
+  async runAllScenarios() {
+    console.log('🚀 Running ALL Test Scenarios');
+    console.log('==============================');
+
+    const scenarios = this.getAvailableScenarios();
+    if (scenarios.length === 0) {
+      console.log('❌ No scenarios found to run.');
+      return;
+    }
+
+    console.log(`📊 Found ${scenarios.length} scenarios to run\n`);
+
+    const results: { scenario: string; success: boolean; errors: string[] }[] = [];
+
+    for (let i = 0; i < scenarios.length; i++) {
+      const scenario = scenarios[i];
+      console.log(`\n${'='.repeat(60)}`);
+      console.log(`🧪 Running Test ${i + 1}/${scenarios.length}: ${scenario}`);
+      console.log(`${'='.repeat(60)}`);
+
+      try {
+        const scenarioPath = path.join(__dirname, 'scenarios', scenario);
+        const scenarioData: TestScenario = JSON.parse(fs.readFileSync(scenarioPath, 'utf8'));
+
+        const result = await this.testRunner.runScenario(scenarioData);
+        results.push({
+          scenario,
+          success: result.success,
+          errors: result.errors
+        });
+
+        if (result.success) {
+          console.log('✅ PASSED');
+        } else {
+          console.log('❌ FAILED');
+          result.errors.forEach((error, index) => {
+            console.log(`   ${index + 1}. ${error}`);
+          });
+        }
+      } catch (error) {
+        console.log(`❌ ERROR: ${error.message}`);
+        results.push({
+          scenario,
+          success: false,
+          errors: [error.message]
+        });
+      }
+    }
+
+    // Summary
+    console.log(`\n${'='.repeat(60)}`);
+    console.log('📊 FINAL SUMMARY');
+    console.log(`${'='.repeat(60)}`);
+
+    const passed = results.filter(r => r.success).length;
+    const failed = results.length - passed;
+
+    console.log(`✅ Passed: ${passed}/${results.length}`);
+    console.log(`❌ Failed: ${failed}/${results.length}`);
+
+    if (failed > 0) {
+      console.log('\n❌ Failed Tests:');
+      results.filter(r => !r.success).forEach((result, index) => {
+        console.log(`${index + 1}. ${result.scenario}`);
+        result.errors.forEach(error => console.log(`   - ${error}`));
+      });
+    }
+
+    console.log(`\n🎯 Overall Success Rate: ${Math.round((passed / results.length) * 100)}%`);
+  }
+
+  async runCategoryScenarios(category: string) {
+    console.log(`🚀 Running ${category.toUpperCase()} Test Scenarios`);
+    console.log('==============================');
+
+    const allScenarios = this.getAvailableScenarios();
+    const categoryScenarios = allScenarios.filter(scenario =>
+      scenario.startsWith(category + path.sep) ||
+      (category === 'uncategorized' && !scenario.includes(path.sep))
+    );
+
+    if (categoryScenarios.length === 0) {
+      console.log(`❌ No scenarios found in category: ${category}`);
+      return;
+    }
+
+    console.log(`📊 Found ${categoryScenarios.length} scenarios in ${category}\n`);
+
+    for (let i = 0; i < categoryScenarios.length; i++) {
+      const scenario = categoryScenarios[i];
+      console.log(`\n${'='.repeat(50)}`);
+      console.log(`🧪 Running ${i + 1}/${categoryScenarios.length}: ${scenario}`);
+      console.log(`${'='.repeat(50)}`);
+
+      await this.runScenario(scenario);
+    }
+  }
+
   async runInteractiveMode() {
     console.log('🎮 Interactive Test Mode');
     console.log('========================');
     console.log('Available commands:');
-    console.log('  run <scenario-name>  - Run a specific scenario');
-    console.log('  list                 - List available scenarios');
-    console.log('  create               - Create a new scenario interactively');
-    console.log('  exit                 - Exit interactive mode');
+    console.log('  run <scenario-name>     - Run a specific scenario');
+    console.log('  run-all                 - Run ALL scenarios sequentially');
+    console.log('  run-category <category> - Run all scenarios in a category');
+    console.log('  list                    - List available scenarios');
+    console.log('  create                  - Create a new scenario interactively');
+    console.log('  exit                    - Exit interactive mode');
     console.log('');
 
     // Simple interactive loop (in a real implementation, you'd use readline)
@@ -65,25 +165,51 @@ class TestCLI {
   listAvailableScenarios() {
     console.log('\n📋 Available Test Scenarios:');
     console.log('============================');
-    
+
     const scenarios = this.getAvailableScenarios();
     if (scenarios.length === 0) {
       console.log('No scenarios found in the scenarios directory.');
       return;
     }
 
-    scenarios.forEach((scenario, index) => {
-      const scenarioPath = path.join(__dirname, 'scenarios', scenario);
-      try {
-        const scenarioData: TestScenario = JSON.parse(fs.readFileSync(scenarioPath, 'utf8'));
-        console.log(`${index + 1}. ${scenario}`);
-        console.log(`   📝 ${scenarioData.description}`);
-        console.log(`   📊 ${scenarioData.steps.length} steps`);
-        console.log('');
-      } catch (error) {
-        console.log(`${index + 1}. ${scenario} (⚠️  Invalid JSON)`);
+    // Group scenarios by category
+    const categorizedScenarios: { [category: string]: string[] } = {};
+    scenarios.forEach(scenario => {
+      const parts = scenario.split(path.sep);
+      if (parts.length > 1) {
+        const category = parts[0];
+        if (!categorizedScenarios[category]) {
+          categorizedScenarios[category] = [];
+        }
+        categorizedScenarios[category].push(scenario);
+      } else {
+        if (!categorizedScenarios['uncategorized']) {
+          categorizedScenarios['uncategorized'] = [];
+        }
+        categorizedScenarios['uncategorized'].push(scenario);
       }
     });
+
+    let totalIndex = 1;
+    Object.keys(categorizedScenarios).sort().forEach(category => {
+      console.log(`\n📁 ${category.toUpperCase()}:`);
+      categorizedScenarios[category].forEach(scenario => {
+        const scenarioPath = path.join(__dirname, 'scenarios', scenario);
+        try {
+          const scenarioData: TestScenario = JSON.parse(fs.readFileSync(scenarioPath, 'utf8'));
+          console.log(`${totalIndex}. ${scenario}`);
+          console.log(`   📝 ${scenarioData.description}`);
+          console.log(`   📊 ${scenarioData.steps.length} steps`);
+          console.log('');
+          totalIndex++;
+        } catch (error) {
+          console.log(`${totalIndex}. ${scenario} (⚠️  Invalid JSON)`);
+          totalIndex++;
+        }
+      });
+    });
+
+    console.log(`\n📊 Total scenarios: ${scenarios.length}`);
   }
 
   private getAvailableScenarios(): string[] {
@@ -92,10 +218,25 @@ class TestCLI {
       fs.mkdirSync(scenariosDir, { recursive: true });
       return [];
     }
-    
-    return fs.readdirSync(scenariosDir)
-      .filter(file => file.endsWith('.json'))
-      .sort();
+
+    const scenarios: string[] = [];
+    this.findScenariosRecursively(scenariosDir, '', scenarios);
+    return scenarios.sort();
+  }
+
+  private findScenariosRecursively(dir: string, relativePath: string, scenarios: string[]) {
+    const items = fs.readdirSync(dir);
+
+    for (const item of items) {
+      const fullPath = path.join(dir, item);
+      const itemRelativePath = relativePath ? path.join(relativePath, item) : item;
+
+      if (fs.statSync(fullPath).isDirectory()) {
+        this.findScenariosRecursively(fullPath, itemRelativePath, scenarios);
+      } else if (item.endsWith('.json')) {
+        scenarios.push(itemRelativePath);
+      }
+    }
   }
 
   async createNewScenario() {
@@ -156,15 +297,29 @@ async function main() {
         }
         await cli.runScenario(scenarioName);
         break;
-        
+
+      case 'run-all':
+        await cli.runAllScenarios();
+        break;
+
+      case 'run-category':
+        const category = args[1];
+        if (!category) {
+          console.log('❌ Please specify a category: npm run test:scenario run-category <category-name>');
+          console.log('Available categories: cash-transactions, overspending');
+          break;
+        }
+        await cli.runCategoryScenarios(category);
+        break;
+
       case 'list':
         cli.listAvailableScenarios();
         break;
-        
+
       case 'create':
         await cli.createNewScenario();
         break;
-        
+
       case 'interactive':
       default:
         await cli.runInteractiveMode();

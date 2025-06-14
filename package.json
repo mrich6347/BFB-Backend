@@ -19,6 +19,8 @@
     "test:ynab": "jest src/testing/run-scenario.spec.ts",
     "test:scenario": "ts-node src/testing/test-cli.ts",
     "test:scenario:run": "ts-node src/testing/test-cli.ts run",
+    "test:scenario:run-all": "ts-node src/testing/test-cli.ts run-all",
+    "test:scenario:run-category": "ts-node src/testing/test-cli.ts run-category",
     "test:scenario:list": "ts-node src/testing/test-cli.ts list"
   },
   "dependencies": {
