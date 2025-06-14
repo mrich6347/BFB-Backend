@@ -428,13 +428,13 @@ export class CategoriesService {
     };
   }
 
-  async remove(id: string, userId: string, authToken: string): Promise<void> {
+  async remove(id: string, userId: string, authToken: string): Promise<{ readyToAssign: number }> {
     const supabase = this.supabaseService.getAuthenticatedClient(authToken);
 
     // Check if this is a credit card payment category and prevent deletion
     const { data: categoryData, error: fetchError } = await supabase
       .from('categories')
-      .select('is_credit_card_payment')
+      .select('is_credit_card_payment, budget_id')
       .eq('id', id)
       .eq('user_id', userId)
       .single();
@@ -468,6 +468,15 @@ export class CategoriesService {
     if (error) {
       throw new Error(error.message);
     }
+
+    // Calculate updated Ready to Assign after category deletion
+    const readyToAssign = await this.readyToAssignService.calculateReadyToAssign(
+      categoryData.budget_id,
+      userId,
+      authToken
+    );
+
+    return { readyToAssign };
   }
 
   async reorder(reorderDto: ReorderCategoriesDto, userId: string, authToken: string): Promise<void> {

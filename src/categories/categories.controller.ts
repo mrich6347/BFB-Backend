@@ -53,7 +53,7 @@ export class CategoriesController {
   }
 
   @Delete(':id')
-  async remove(@Param('id', new ParseUUIDPipe()) id: string, @Req() req: any): Promise<void> {
+  async remove(@Param('id', new ParseUUIDPipe()) id: string, @Req() req: any): Promise<{ readyToAssign: number }> {
     const authToken = this.authService.getAuthToken(req);
     return this.categoriesService.remove(id, req.user.id, authToken);
   }
