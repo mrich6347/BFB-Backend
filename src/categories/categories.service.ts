@@ -170,6 +170,24 @@ export class CategoriesService {
   async update(id: string, updateCategoryDto: UpdateCategoryDto, userId: string, authToken: string, year?: number, month?: number): Promise<CategoryWithReadyToAssignResponse> {
     const supabase = this.supabaseService.getAuthenticatedClient(authToken);
 
+    // Check if this is a credit card payment category and prevent name changes
+    if (updateCategoryDto.name) {
+      const { data: categoryData, error: fetchError } = await supabase
+        .from('categories')
+        .select('is_credit_card_payment')
+        .eq('id', id)
+        .eq('user_id', userId)
+        .single();
+
+      if (fetchError) {
+        throw new Error(fetchError.message);
+      }
+
+      if (categoryData.is_credit_card_payment) {
+        throw new Error('Credit card payment categories cannot be renamed');
+      }
+    }
+
     // Separate category fields from balance fields
     const { assigned, activity, available, ...categoryFields } = updateCategoryDto;
 
@@ -322,6 +340,22 @@ export class CategoriesService {
 
   async remove(id: string, userId: string, authToken: string): Promise<void> {
     const supabase = this.supabaseService.getAuthenticatedClient(authToken);
+
+    // Check if this is a credit card payment category and prevent deletion
+    const { data: categoryData, error: fetchError } = await supabase
+      .from('categories')
+      .select('is_credit_card_payment')
+      .eq('id', id)
+      .eq('user_id', userId)
+      .single();
+
+    if (fetchError) {
+      throw new Error(fetchError.message);
+    }
+
+    if (categoryData.is_credit_card_payment) {
+      throw new Error('Credit card payment categories cannot be deleted');
+    }
 
     // Delete category balances first (due to foreign key constraint)
     const { error: balanceError } = await supabase

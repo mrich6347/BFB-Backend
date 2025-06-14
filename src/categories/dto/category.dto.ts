@@ -100,6 +100,8 @@ export class CategoryResponse {
   activity: number;
   available: number;
   display_order: number;
+  is_credit_card_payment: boolean;
+  linked_account_id: string | null;
   created_at: Date;
   updated_at: Date;
 }
