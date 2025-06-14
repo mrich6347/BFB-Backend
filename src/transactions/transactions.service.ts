@@ -635,14 +635,17 @@ export class TransactionsService {
     let clearedTransactionTotal = 0;
     let unclearedTransactionTotal = 0;
 
+    console.log(`🔍 Processing ${transactions.length} transactions for account ${accountId}:`);
     for (const transaction of transactions) {
       const amount = parseFloat(transaction.amount.toString());
+      console.log(`  Transaction: amount=${amount}, is_cleared=${transaction.is_cleared}`);
       if (transaction.is_cleared) {
         clearedTransactionTotal += amount;
       } else {
         unclearedTransactionTotal += amount;
       }
     }
+    console.log(`📊 Transaction totals: cleared=${clearedTransactionTotal}, uncleared=${unclearedTransactionTotal}`);
 
     // Get the starting balance from the account_balance field
     const accountBalance = parseFloat(account.account_balance.toString());
