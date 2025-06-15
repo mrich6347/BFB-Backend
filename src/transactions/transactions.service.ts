@@ -34,8 +34,11 @@ export class TransactionsService {
     // Generate transfer_id for transfers
     const transferId = isTransfer ? uuidv4() : createTransactionDto.transfer_id;
 
+    // Extract timezone-related fields that shouldn't be stored in database
+    const { userDate, userYear, userMonth, ...transactionData } = createTransactionDto;
+
     const payload = {
-      ...createTransactionDto,
+      ...transactionData,
       user_id: userId,
       is_cleared: createTransactionDto.is_cleared ?? false,
       is_reconciled: createTransactionDto.is_reconciled ?? false,
@@ -242,9 +245,12 @@ export class TransactionsService {
     const isReadyToAssign = updateTransactionDto.category_id === 'ready-to-assign';
     const wasReadyToAssign = originalTransaction.category_id === null;
 
+    // Extract timezone-related fields that shouldn't be stored in database
+    const { userDate, userYear, userMonth, ...updateData } = updateTransactionDto;
+
     // Prepare update payload
     const updatePayload = {
-      ...updateTransactionDto,
+      ...updateData,
       // Store null for ready-to-assign transactions
       category_id: isReadyToAssign ? null : updateTransactionDto.category_id,
     };
