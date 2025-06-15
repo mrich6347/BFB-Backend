@@ -3,6 +3,7 @@ import { SupabaseClient } from '@supabase/supabase-js';
 import { SupabaseService } from '../supabase/supabase.service';
 import { CreateTransactionDto, UpdateTransactionDto, TransactionResponse } from './dto/transaction.dto';
 import { CategoryBalancesService } from '../category-balances/category-balances.service';
+import { v4 as uuidv4 } from 'uuid';
 
 @Injectable()
 export class TransactionsService {
@@ -18,8 +19,19 @@ export class TransactionsService {
   async create(createTransactionDto: CreateTransactionDto, userId: string, authToken: string): Promise<TransactionResponse> {
     const supabase = this.supabaseService.getAuthenticatedClient(authToken);
 
+    // Check if this is a transfer transaction
+    const isTransfer = this.isTransferPayee(createTransactionDto.payee || '');
+
     // Handle special "ready-to-assign" category
     const isReadyToAssign = createTransactionDto.category_id === 'ready-to-assign';
+
+    // For transfers, validate that we have a category (cash account requirement)
+    if (isTransfer && !createTransactionDto.category_id) {
+      throw new Error('Transfer from cash account requires a category selection');
+    }
+
+    // Generate transfer_id for transfers
+    const transferId = isTransfer ? uuidv4() : createTransactionDto.transfer_id;
 
     const payload = {
       ...createTransactionDto,
@@ -28,6 +40,9 @@ export class TransactionsService {
       is_reconciled: createTransactionDto.is_reconciled ?? false,
       // Store null for ready-to-assign transactions
       category_id: isReadyToAssign ? null : createTransactionDto.category_id,
+      // Ensure negative amount for cash outflow in transfers
+      amount: isTransfer ? -Math.abs(createTransactionDto.amount) : createTransactionDto.amount,
+      transfer_id: transferId,
     };
 
     const { data, error } = await supabase
@@ -38,6 +53,38 @@ export class TransactionsService {
 
     if (error) {
       throw new Error(error.message);
+    }
+
+    // Handle transfer creation if this is a transfer transaction
+    if (isTransfer) {
+      try {
+        const budgetId = await this.getBudgetIdFromAccount(data.account_id, userId, authToken);
+        if (!budgetId) {
+          throw new Error('Could not determine budget for transfer');
+        }
+
+        // Parse target account name and find the account
+        const targetAccountName = this.parseTransferAccountName(data.payee || '');
+        const targetAccount = await this.getAccountByName(targetAccountName, budgetId, userId, authToken);
+
+        // Validate that target is a tracking account
+        if (targetAccount.account_type !== 'TRACKING') {
+          throw new Error('Transfers are only allowed to tracking accounts');
+        }
+
+        // Create the linked transfer transaction
+        await this.createTransferTransaction(data, targetAccount.id, targetAccountName, userId, authToken);
+      } catch (transferError) {
+        console.error('Error creating transfer transaction:', transferError);
+        // If transfer creation fails, we should delete the source transaction to maintain consistency
+        await supabase
+          .from('transactions')
+          .delete()
+          .eq('id', data.id)
+          .eq('user_id', userId);
+
+        throw new Error(`Transfer creation failed: ${transferError.message}`);
+      }
     }
 
     // Update category activity if transaction has a category (but not for ready-to-assign)
@@ -188,6 +235,16 @@ export class TransactionsService {
       throw new Error(error.message);
     }
 
+    // Handle transfer synchronization if this is a transfer transaction
+    if (originalTransaction.transfer_id) {
+      try {
+        await this.updateLinkedTransferTransaction(originalTransaction, data, userId, authToken);
+      } catch (transferError) {
+        console.error('Error updating linked transfer transaction:', transferError);
+        // Don't throw here - the main transaction was updated successfully
+      }
+    }
+
     // Handle category activity updates if relevant fields changed
     const budgetId = await this.getBudgetIdFromAccount(data.account_id, userId, authToken);
 
@@ -294,6 +351,16 @@ export class TransactionsService {
 
     if (fetchError) {
       throw new Error(fetchError.message);
+    }
+
+    // Handle transfer deletion if this is a transfer transaction
+    if (transaction.transfer_id) {
+      try {
+        await this.deleteLinkedTransferTransaction(transaction.transfer_id, id, userId, authToken);
+      } catch (transferError) {
+        console.error('Error deleting linked transfer transaction:', transferError);
+        // Don't throw here - we still want to delete the main transaction
+      }
     }
 
     // Reverse category activity before deleting transaction
@@ -870,6 +937,203 @@ export class TransactionsService {
     }
 
     console.log(`✅ Successfully updated account balances for account: ${accountId}`);
+  }
+
+  /**
+   * Transfer-related helper methods
+   */
+  private static readonly TRANSFER_PREFIX = 'Transfer : ';
+
+  private isTransferPayee(payee: string): boolean {
+    return payee?.startsWith(TransactionsService.TRANSFER_PREFIX) || false;
+  }
+
+  private parseTransferAccountName(payee: string): string {
+    if (!this.isTransferPayee(payee)) {
+      throw new Error('Invalid transfer payee format');
+    }
+    return payee.substring(TransactionsService.TRANSFER_PREFIX.length);
+  }
+
+  private async getAccountByName(accountName: string, budgetId: string, userId: string, authToken: string): Promise<any> {
+    const supabase = this.supabaseService.getAuthenticatedClient(authToken);
+
+    const { data, error } = await supabase
+      .from('accounts')
+      .select('*')
+      .eq('user_id', userId)
+      .eq('budget_id', budgetId)
+      .eq('name', accountName)
+      .eq('is_active', true)
+      .single();
+
+    if (error) {
+      throw new Error(`Account '${accountName}' not found: ${error.message}`);
+    }
+
+    return data;
+  }
+
+  private async createTransferTransaction(
+    sourceTransaction: TransactionResponse,
+    targetAccountId: string,
+    targetAccountName: string,
+    userId: string,
+    authToken: string
+  ): Promise<TransactionResponse> {
+    const supabase = this.supabaseService.getAuthenticatedClient(authToken);
+
+    // Get source account name for the target transaction payee
+    const sourceAccount = await supabase
+      .from('accounts')
+      .select('name')
+      .eq('id', sourceTransaction.account_id)
+      .eq('user_id', userId)
+      .single();
+
+    if (sourceAccount.error) {
+      throw new Error(`Failed to get source account name: ${sourceAccount.error.message}`);
+    }
+
+    // Create the target transaction
+    const targetTransactionPayload = {
+      user_id: userId,
+      account_id: targetAccountId,
+      date: sourceTransaction.date,
+      amount: Math.abs(sourceTransaction.amount), // Positive amount for inflow
+      payee: `${TransactionsService.TRANSFER_PREFIX}${sourceAccount.data.name}`,
+      memo: sourceTransaction.memo,
+      category_id: null, // Tracking accounts don't use categories
+      is_cleared: sourceTransaction.is_cleared,
+      is_reconciled: false,
+      transfer_id: sourceTransaction.transfer_id
+    };
+
+    const { data, error } = await supabase
+      .from('transactions')
+      .insert(targetTransactionPayload)
+      .select('*')
+      .single();
+
+    if (error) {
+      throw new Error(`Failed to create transfer transaction: ${error.message}`);
+    }
+
+    // Update target account balances
+    try {
+      await this.updateAccountBalances(targetAccountId, userId, authToken);
+    } catch (balanceError) {
+      console.error('Error updating target account balances:', balanceError);
+    }
+
+    return data;
+  }
+
+  private async updateLinkedTransferTransaction(
+    originalTransaction: TransactionResponse,
+    updatedTransaction: TransactionResponse,
+    userId: string,
+    authToken: string
+  ): Promise<void> {
+    const supabase = this.supabaseService.getAuthenticatedClient(authToken);
+
+    // Find the linked transfer transaction
+    const { data: linkedTransaction, error: findError } = await supabase
+      .from('transactions')
+      .select('*')
+      .eq('transfer_id', originalTransaction.transfer_id)
+      .eq('user_id', userId)
+      .neq('id', originalTransaction.id)
+      .single();
+
+    if (findError || !linkedTransaction) {
+      console.error('Linked transfer transaction not found:', findError);
+      return;
+    }
+
+    // Update the linked transaction with corresponding changes
+    const linkedUpdatePayload: any = {};
+
+    // Update date if changed
+    if (originalTransaction.date !== updatedTransaction.date) {
+      linkedUpdatePayload.date = updatedTransaction.date;
+    }
+
+    // Update amount if changed (opposite sign)
+    if (originalTransaction.amount !== updatedTransaction.amount) {
+      linkedUpdatePayload.amount = -updatedTransaction.amount;
+    }
+
+    // Update memo if changed
+    if (originalTransaction.memo !== updatedTransaction.memo) {
+      linkedUpdatePayload.memo = updatedTransaction.memo;
+    }
+
+    // Update cleared status if changed
+    if (originalTransaction.is_cleared !== updatedTransaction.is_cleared) {
+      linkedUpdatePayload.is_cleared = updatedTransaction.is_cleared;
+    }
+
+    // Only update if there are changes
+    if (Object.keys(linkedUpdatePayload).length > 0) {
+      const { error: updateError } = await supabase
+        .from('transactions')
+        .update(linkedUpdatePayload)
+        .eq('id', linkedTransaction.id)
+        .eq('user_id', userId);
+
+      if (updateError) {
+        throw new Error(`Failed to update linked transfer transaction: ${updateError.message}`);
+      }
+
+      // Update account balances for the linked transaction's account
+      try {
+        await this.updateAccountBalances(linkedTransaction.account_id, userId, authToken);
+      } catch (balanceError) {
+        console.error('Error updating linked account balances:', balanceError);
+      }
+    }
+  }
+
+  private async deleteLinkedTransferTransaction(
+    transferId: string,
+    excludeTransactionId: string,
+    userId: string,
+    authToken: string
+  ): Promise<void> {
+    const supabase = this.supabaseService.getAuthenticatedClient(authToken);
+
+    // Find the linked transfer transaction
+    const { data: linkedTransaction, error: findError } = await supabase
+      .from('transactions')
+      .select('*')
+      .eq('transfer_id', transferId)
+      .eq('user_id', userId)
+      .neq('id', excludeTransactionId)
+      .single();
+
+    if (findError || !linkedTransaction) {
+      console.error('Linked transfer transaction not found:', findError);
+      return;
+    }
+
+    // Delete the linked transaction
+    const { error: deleteError } = await supabase
+      .from('transactions')
+      .delete()
+      .eq('id', linkedTransaction.id)
+      .eq('user_id', userId);
+
+    if (deleteError) {
+      throw new Error(`Failed to delete linked transfer transaction: ${deleteError.message}`);
+    }
+
+    // Update account balances for the linked transaction's account
+    try {
+      await this.updateAccountBalances(linkedTransaction.account_id, userId, authToken);
+    } catch (balanceError) {
+      console.error('Error updating linked account balances after deletion:', balanceError);
+    }
   }
 
 

@@ -384,6 +384,34 @@ export class AccountsService {
     return balanceHistory;
   }
 
+  async getTransferOptions(accountId: string, userId: string, authToken: string): Promise<AccountResponse[]> {
+    const supabase = this.supabaseService.getAuthenticatedClient(authToken);
+
+    // Get the source account to determine its type and budget
+    const sourceAccount = await this.findOne(accountId, userId, authToken);
+
+    // Only allow transfers from CASH accounts to TRACKING accounts
+    if (sourceAccount.account_type !== 'CASH') {
+      throw new Error('Transfers are only supported from CASH accounts');
+    }
+
+    // Get all TRACKING accounts in the same budget
+    const { data, error } = await supabase
+      .from('accounts')
+      .select('id, name, account_type, budget_id, account_balance, cleared_balance, uncleared_balance, working_balance, is_active')
+      .eq('user_id', userId)
+      .eq('budget_id', sourceAccount.budget_id)
+      .eq('account_type', 'TRACKING')
+      .eq('is_active', true)
+      .order('name');
+
+    if (error) {
+      throw new Error(error.message);
+    }
+
+    return data;
+  }
+
   async reconcileAccount(accountId: string, reconcileDto: ReconcileAccountDto, userId: string, authToken: string): Promise<ReconcileAccountResponse> {
     const supabase = this.supabaseService.getAuthenticatedClient(authToken);
 

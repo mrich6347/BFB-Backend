@@ -71,4 +71,13 @@ export class AccountsController {
     const authToken = this.authService.getAuthToken(req);
     return this.accountsService.getBalanceHistory(id, req.user.id, authToken);
   }
+
+  @Get(':id/transfer-options')
+  getTransferOptions(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Req() req: any
+  ): Promise<AccountResponse[]> {
+    const authToken = this.authService.getAuthToken(req);
+    return this.accountsService.getTransferOptions(id, req.user.id, authToken);
+  }
 }
