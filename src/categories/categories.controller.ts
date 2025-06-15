@@ -1,6 +1,6 @@
 import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards, Req, Query, ParseUUIDPipe, ParseIntPipe } from '@nestjs/common';
 import { CategoriesService } from './categories.service';
-import { CreateCategoryDto, UpdateCategoryDto, CategoryResponse, ReorderCategoriesDto, MoveMoneyDto, PullFromReadyToAssignDto, CategoryWithReadyToAssignResponse, CategoryUpdateWithAffectedCategoriesResponse } from './dto/category.dto';
+import { CreateCategoryDto, UpdateCategoryDto, CategoryResponse, ReorderCategoriesDto, MoveMoneyDto, PullFromReadyToAssignDto, CategoryWithReadyToAssignResponse, CategoryUpdateWithAffectedCategoriesResponse, UnhideCategoryDto } from './dto/category.dto';
 import { SupabaseAuthGuard } from '../guards/auth.guard';
 import { AuthService } from '../configurations/auth/auth.service';
 
@@ -59,9 +59,13 @@ export class CategoriesController {
   }
 
   @Patch(':id/unhide')
-  async unhide(@Param('id', new ParseUUIDPipe()) id: string, @Req() req: any): Promise<{ readyToAssign: number }> {
+  async unhide(
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Body() unhideCategoryDto: UnhideCategoryDto,
+    @Req() req: any
+  ): Promise<{ readyToAssign: number }> {
     const authToken = this.authService.getAuthToken(req);
-    return this.categoriesService.unhide(id, req.user.id, authToken);
+    return this.categoriesService.unhide(id, req.user.id, authToken, unhideCategoryDto.targetGroupId);
   }
 
   @Post('reorder')

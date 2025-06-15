@@ -1,6 +1,6 @@
 import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards, Req, Query, ParseUUIDPipe } from '@nestjs/common';
 import { CategoryGroupsService } from './category-groups.service';
-import { CreateCategoryGroupDto, UpdateCategoryGroupDto, CategoryGroupResponse, ReorderCategoryGroupsDto } from './dto/category-group.dto';
+import { CreateCategoryGroupDto, UpdateCategoryGroupDto, CategoryGroupResponse, ReorderCategoryGroupsDto, CategoryGroupDeleteResponse } from './dto/category-group.dto';
 import { SupabaseAuthGuard } from '../guards/auth.guard';
 import { AuthService } from '../configurations/auth/auth.service';
 
@@ -35,13 +35,13 @@ export class CategoryGroupsController {
   }
 
   @Delete(':id')
-  async remove(@Param('id', new ParseUUIDPipe()) id: string, @Req() req: any): Promise<void> {
+  async remove(@Param('id', new ParseUUIDPipe()) id: string, @Req() req: any): Promise<CategoryGroupDeleteResponse> {
     const authToken = this.authService.getAuthToken(req);
     return this.categoryGroupsService.remove(id, req.user.id, authToken);
   }
 
   @Patch(':id/hide')
-  async hide(@Param('id', new ParseUUIDPipe()) id: string, @Req() req: any): Promise<void> {
+  async hide(@Param('id', new ParseUUIDPipe()) id: string, @Req() req: any): Promise<CategoryGroupDeleteResponse> {
     const authToken = this.authService.getAuthToken(req);
     return this.categoryGroupsService.hide(id, req.user.id, authToken);
   }

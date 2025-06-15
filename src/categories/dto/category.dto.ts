@@ -48,6 +48,13 @@ export class ReorderCategoriesDto {
   category_ids: string[];
 }
 
+export class UnhideCategoryDto {
+  @IsString()
+  @IsUUID()
+  @IsOptional()
+  targetGroupId?: string;
+}
+
 export class MoveMoneyDto {
   @IsString()
   @IsUUID()

@@ -40,3 +40,7 @@ export class CategoryGroupResponse {
   created_at: Date;
   updated_at: Date;
 }
+
+export class CategoryGroupDeleteResponse {
+  movedCategories: any[];
+}

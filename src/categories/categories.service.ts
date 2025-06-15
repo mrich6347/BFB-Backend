@@ -356,7 +356,7 @@ export class CategoriesService {
     };
   }
 
-  async hide(id: string, userId: string, authToken: string): Promise<{ readyToAssign: number }> {
+  async hide(id: string, userId: string, authToken: string): Promise<{ readyToAssign: number; category: CategoryResponse }> {
     const supabase = this.supabaseService.getAuthenticatedClient(authToken);
 
     // Get category data
@@ -396,6 +396,18 @@ export class CategoriesService {
       throw new Error(updateError.message);
     }
 
+    // Get the updated category data
+    const { data: updatedCategory, error: updatedCategoryError } = await supabase
+      .from('categories')
+      .select('*')
+      .eq('id', id)
+      .eq('user_id', userId)
+      .single();
+
+    if (updatedCategoryError) {
+      throw new Error(updatedCategoryError.message);
+    }
+
     // Calculate updated Ready to Assign (should remain the same since we're just moving)
     const readyToAssign = await this.readyToAssignService.calculateReadyToAssign(
       categoryData.budget_id,
@@ -403,10 +415,18 @@ export class CategoriesService {
       authToken
     );
 
-    return { readyToAssign };
+    // Return category with default balance values (frontend will merge with actual balances)
+    const category: CategoryResponse = {
+      ...updatedCategory,
+      assigned: 0,
+      activity: 0,
+      available: 0
+    };
+
+    return { readyToAssign, category };
   }
 
-  async unhide(id: string, userId: string, authToken: string, targetGroupId?: string): Promise<{ readyToAssign: number }> {
+  async unhide(id: string, userId: string, authToken: string, targetGroupId?: string): Promise<{ readyToAssign: number; category: CategoryResponse }> {
     const supabase = this.supabaseService.getAuthenticatedClient(authToken);
 
     // Get category data
@@ -463,6 +483,18 @@ export class CategoriesService {
       throw new Error(updateError.message);
     }
 
+    // Get the updated category data
+    const { data: updatedCategory, error: updatedCategoryError } = await supabase
+      .from('categories')
+      .select('*')
+      .eq('id', id)
+      .eq('user_id', userId)
+      .single();
+
+    if (updatedCategoryError) {
+      throw new Error(updatedCategoryError.message);
+    }
+
     // Calculate updated Ready to Assign (should remain the same since we're just moving)
     const readyToAssign = await this.readyToAssignService.calculateReadyToAssign(
       categoryData.budget_id,
@@ -470,7 +502,15 @@ export class CategoriesService {
       authToken
     );
 
-    return { readyToAssign };
+    // Return category with default balance values (frontend will merge with actual balances)
+    const category: CategoryResponse = {
+      ...updatedCategory,
+      assigned: 0,
+      activity: 0,
+      available: 0
+    };
+
+    return { readyToAssign, category };
   }
 
   async reorder(reorderDto: ReorderCategoriesDto, userId: string, authToken: string): Promise<void> {
