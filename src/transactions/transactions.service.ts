@@ -408,9 +408,23 @@ export class TransactionsService {
       throw new Error(fetchError.message);
     }
 
-    // Handle transfer deletion if this is a transfer transaction
+    // Store transfer info before deletion for account balance response
+    let linkedAccountId: string | null = null;
     if (transaction.transfer_id) {
       try {
+        // Get the linked transaction account ID before deleting
+        const { data: linkedTransaction } = await supabase
+          .from('transactions')
+          .select('account_id')
+          .eq('transfer_id', transaction.transfer_id)
+          .eq('user_id', userId)
+          .neq('id', transaction.id)
+          .single();
+
+        if (linkedTransaction) {
+          linkedAccountId = linkedTransaction.account_id;
+        }
+
         await this.deleteLinkedTransferTransaction(transaction.transfer_id, id, userId, authToken);
       } catch (transferError) {
         console.error('Error deleting linked transfer transaction:', transferError);
@@ -461,36 +475,26 @@ export class TransactionsService {
     }
 
     // For transfer transactions, return both account balances
-    if (transaction.transfer_id) {
+    if (transaction.transfer_id && linkedAccountId) {
       try {
-        const supabase = this.supabaseService.getAuthenticatedClient(authToken);
+        // Get both account details in parallel for better performance
+        const [sourceAccountDetails, targetAccountDetails] = await Promise.all([
+          this.getAccountDetails(transaction.account_id, userId, authToken),
+          this.getAccountDetails(linkedAccountId, userId, authToken)
+        ]);
 
-        // Get the linked transaction account ID and both account details in parallel
-        const { data: linkedTransaction } = await supabase
-          .from('transactions')
-          .select('account_id')
-          .eq('transfer_id', transaction.transfer_id)
-          .eq('user_id', userId)
-          .neq('id', transaction.id)
-          .single();
-
-        if (linkedTransaction) {
-          // Get both account details in parallel for better performance
-          const [sourceAccountDetails, targetAccountDetails] = await Promise.all([
-            this.getAccountDetails(transaction.account_id, userId, authToken),
-            this.getAccountDetails(linkedTransaction.account_id, userId, authToken)
-          ]);
-
-          return {
-            sourceAccount: sourceAccountDetails,
-            targetAccount: targetAccountDetails
-          };
-        }
+        return {
+          sourceAccount: sourceAccountDetails,
+          targetAccount: targetAccountDetails
+        };
       } catch (accountError) {
         console.error('Error getting account details for transfer delete response:', accountError);
         // Fall back to void response
       }
     }
+
+    // For non-transfer transactions, return void
+    return;
   }
 
   async toggleCleared(id: string, userId: string, authToken: string): Promise<TransactionResponse> {
