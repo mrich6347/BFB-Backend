@@ -52,10 +52,16 @@ export class CategoriesController {
     return this.categoriesService.updateWithAffectedCategories(id, updateCategoryDto, req.user.id, authToken, year, month);
   }
 
-  @Delete(':id')
-  async remove(@Param('id', new ParseUUIDPipe()) id: string, @Req() req: any): Promise<{ readyToAssign: number }> {
+  @Patch(':id/hide')
+  async hide(@Param('id', new ParseUUIDPipe()) id: string, @Req() req: any): Promise<{ readyToAssign: number }> {
     const authToken = this.authService.getAuthToken(req);
-    return this.categoriesService.remove(id, req.user.id, authToken);
+    return this.categoriesService.hide(id, req.user.id, authToken);
+  }
+
+  @Patch(':id/unhide')
+  async unhide(@Param('id', new ParseUUIDPipe()) id: string, @Req() req: any): Promise<{ readyToAssign: number }> {
+    const authToken = this.authService.getAuthToken(req);
+    return this.categoriesService.unhide(id, req.user.id, authToken);
   }
 
   @Post('reorder')

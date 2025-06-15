@@ -356,13 +356,13 @@ export class CategoriesService {
     };
   }
 
-  async remove(id: string, userId: string, authToken: string): Promise<{ readyToAssign: number }> {
+  async hide(id: string, userId: string, authToken: string): Promise<{ readyToAssign: number }> {
     const supabase = this.supabaseService.getAuthenticatedClient(authToken);
 
-    // Get category data for budget_id
+    // Get category data
     const { data: categoryData, error: fetchError } = await supabase
       .from('categories')
-      .select('budget_id')
+      .select('budget_id, category_group_id')
       .eq('id', id)
       .eq('user_id', userId)
       .single();
@@ -371,29 +371,99 @@ export class CategoriesService {
       throw new Error(fetchError.message);
     }
 
-    // Delete category balances first (due to foreign key constraint)
-    const { error: balanceError } = await supabase
-      .from('category_balances')
-      .delete()
-      .eq('category_id', id)
-      .eq('user_id', userId);
+    // Get the Hidden Categories group for this budget
+    const { data: hiddenGroup, error: hiddenGroupError } = await supabase
+      .from('category_groups')
+      .select('id')
+      .eq('budget_id', categoryData.budget_id)
+      .eq('user_id', userId)
+      .eq('name', 'Hidden Categories')
+      .eq('is_system_group', true)
+      .single();
 
-    if (balanceError) {
-      throw new Error(balanceError.message);
+    if (hiddenGroupError) {
+      throw new Error('Hidden Categories group not found');
     }
 
-    // Then delete the category
-    const { error } = await supabase
+    // Move category to Hidden Categories group
+    const { error: updateError } = await supabase
       .from('categories')
-      .delete()
+      .update({ category_group_id: hiddenGroup.id })
       .eq('id', id)
       .eq('user_id', userId);
 
-    if (error) {
-      throw new Error(error.message);
+    if (updateError) {
+      throw new Error(updateError.message);
     }
 
-    // Calculate updated Ready to Assign after category deletion
+    // Calculate updated Ready to Assign (should remain the same since we're just moving)
+    const readyToAssign = await this.readyToAssignService.calculateReadyToAssign(
+      categoryData.budget_id,
+      userId,
+      authToken
+    );
+
+    return { readyToAssign };
+  }
+
+  async unhide(id: string, userId: string, authToken: string, targetGroupId?: string): Promise<{ readyToAssign: number }> {
+    const supabase = this.supabaseService.getAuthenticatedClient(authToken);
+
+    // Get category data
+    const { data: categoryData, error: fetchError } = await supabase
+      .from('categories')
+      .select('budget_id, category_group_id')
+      .eq('id', id)
+      .eq('user_id', userId)
+      .single();
+
+    if (fetchError) {
+      throw new Error(fetchError.message);
+    }
+
+    // Verify category is currently in Hidden Categories group
+    const { data: currentGroup, error: groupError } = await supabase
+      .from('category_groups')
+      .select('name, is_system_group')
+      .eq('id', categoryData.category_group_id)
+      .eq('user_id', userId)
+      .single();
+
+    if (groupError || currentGroup.name !== 'Hidden Categories') {
+      throw new Error('Category is not currently hidden');
+    }
+
+    // If no target group specified, move to first non-system group
+    let targetGroup = targetGroupId;
+    if (!targetGroup) {
+      const { data: firstGroup, error: firstGroupError } = await supabase
+        .from('category_groups')
+        .select('id')
+        .eq('budget_id', categoryData.budget_id)
+        .eq('user_id', userId)
+        .eq('is_system_group', false)
+        .order('display_order', { ascending: true })
+        .limit(1)
+        .single();
+
+      if (firstGroupError) {
+        throw new Error('No available category group to move to');
+      }
+      targetGroup = firstGroup.id;
+    }
+
+    // Move category to target group
+    const { error: updateError } = await supabase
+      .from('categories')
+      .update({ category_group_id: targetGroup })
+      .eq('id', id)
+      .eq('user_id', userId);
+
+    if (updateError) {
+      throw new Error(updateError.message);
+    }
+
+    // Calculate updated Ready to Assign (should remain the same since we're just moving)
     const readyToAssign = await this.readyToAssignService.calculateReadyToAssign(
       categoryData.budget_id,
       userId,

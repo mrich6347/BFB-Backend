@@ -40,6 +40,12 @@ export class CategoryGroupsController {
     return this.categoryGroupsService.remove(id, req.user.id, authToken);
   }
 
+  @Patch(':id/hide')
+  async hide(@Param('id', new ParseUUIDPipe()) id: string, @Req() req: any): Promise<void> {
+    const authToken = this.authService.getAuthToken(req);
+    return this.categoryGroupsService.hide(id, req.user.id, authToken);
+  }
+
   @Post('reorder')
   async reorder(@Body() reorderDto: ReorderCategoryGroupsDto, @Req() req: any): Promise<void> {
     const authToken = this.authService.getAuthToken(req);

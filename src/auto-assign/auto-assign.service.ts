@@ -245,7 +245,7 @@ export class AutoAssignService {
   private async validateCategoriesOwnership(supabase: SupabaseClient, categoryIds: string[], userId: string, budgetId: string): Promise<void> {
     const { data: categories, error } = await supabase
       .from('categories')
-      .select('id')
+      .select('id, category_group_id')
       .in('id', categoryIds)
       .eq('user_id', userId)
       .eq('budget_id', budgetId);
@@ -256,6 +256,31 @@ export class AutoAssignService {
 
     if (!categories || categories.length !== categoryIds.length) {
       throw new Error('One or more categories do not belong to the user or budget');
+    }
+
+    // Get the Hidden Categories group for this budget
+    const { data: hiddenGroup, error: hiddenGroupError } = await supabase
+      .from('category_groups')
+      .select('id')
+      .eq('budget_id', budgetId)
+      .eq('user_id', userId)
+      .eq('name', 'Hidden Categories')
+      .eq('is_system_group', true)
+      .single();
+
+    if (hiddenGroupError && hiddenGroupError.code !== 'PGRST116') {
+      throw new Error(hiddenGroupError.message);
+    }
+
+    // Check if any categories are in Hidden Categories group
+    if (hiddenGroup) {
+      const hiddenCategories = categories.filter(cat =>
+        cat.category_group_id === hiddenGroup.id
+      );
+
+      if (hiddenCategories.length > 0) {
+        throw new Error('Hidden categories cannot be used in auto-assign configurations');
+      }
     }
   }
 
