@@ -1,0 +1,186 @@
+{
+  "name": "Complete Month Rollover Test",
+  "description": "Comprehensive test that sets up a budget in June 2025, creates transactions, then triggers month rollover to July 2025 and verifies that assigned amounts reset to 0, activity resets to 0, and available balances carry forward correctly.",
+  "steps": [
+    {
+      "action": "create_budget",
+      "description": "Create test budget",
+      "params": {
+        "name": "Complete Month Rollover Test Budget",
+        "currency": "USD",
+        "currency_placement": "BEFORE",
+        "date_format": "US_SLASH",
+        "number_format": "DOT_COMMA"
+      }
+    },
+    {
+      "action": "create_account",
+      "description": "Create checking account with $3000",
+      "params": {
+        "name": "Checking",
+        "account_type": "CASH",
+        "account_balance": 3000
+      }
+    },
+    {
+      "action": "create_category_group",
+      "description": "Create Monthly Expenses category group",
+      "params": {
+        "name": "Monthly Expenses"
+      }
+    },
+    {
+      "action": "create_category",
+      "description": "Create Groceries category",
+      "params": {
+        "name": "Groceries",
+        "category_group_name": "Monthly Expenses"
+      }
+    },
+    {
+      "action": "create_category",
+      "description": "Create Rent category",
+      "params": {
+        "name": "Rent",
+        "category_group_name": "Monthly Expenses"
+      }
+    },
+    {
+      "action": "create_category",
+      "description": "Create Utilities category",
+      "params": {
+        "name": "Utilities",
+        "category_group_name": "Monthly Expenses"
+      }
+    },
+    {
+      "action": "assign_money",
+      "description": "Assign $200 to Groceries in June 2025",
+      "params": {
+        "category_name": "Groceries",
+        "amount": 200
+      }
+    },
+    {
+      "action": "assign_money",
+      "description": "Assign $1000 to Rent in June 2025",
+      "params": {
+        "category_name": "Rent",
+        "amount": 1000
+      }
+    },
+    {
+      "action": "assign_money",
+      "description": "Assign $100 to Utilities in June 2025",
+      "params": {
+        "category_name": "Utilities",
+        "amount": 100
+      }
+    },
+    {
+      "action": "create_transaction",
+      "description": "Spend $150 on groceries (leaving $50 available)",
+      "params": {
+        "account_name": "Checking",
+        "payee": "Grocery Store",
+        "category_name": "Groceries",
+        "amount": -150,
+        "date": "2025-06-15"
+      }
+    },
+    {
+      "action": "create_transaction",
+      "description": "Pay $1000 rent (exactly matching assigned amount)",
+      "params": {
+        "account_name": "Checking",
+        "payee": "Landlord",
+        "category_name": "Rent",
+        "amount": -1000,
+        "date": "2025-06-15"
+      }
+    },
+    {
+      "action": "create_transaction",
+      "description": "Pay $150 utilities (overspending by $50)",
+      "params": {
+        "account_name": "Checking",
+        "payee": "Electric Company",
+        "category_name": "Utilities",
+        "amount": -150,
+        "date": "2025-06-15"
+      }
+    },
+    {
+      "action": "get_state",
+      "description": "Verify June 2025 state before rollover"
+    },
+    {
+      "action": "trigger_month_rollover",
+      "description": "Trigger month rollover by requesting July 2025 data",
+      "params": {
+        "userDate": "2025-07-01",
+        "userYear": 2025,
+        "userMonth": 7
+      }
+    },
+    {
+      "action": "get_state",
+      "description": "Verify July 2025 state after rollover",
+      "params": {
+        "userDate": "2025-07-01",
+        "userYear": 2025,
+        "userMonth": 7
+      }
+    }
+  ],
+  "expectedFinalState": {
+    "readyToAssign": 1700,
+    "accounts": {
+      "Checking": {
+        "working_balance": 1700
+      }
+    },
+    "categories": {
+      "Groceries": {
+        "assigned": 0,
+        "activity": 0,
+        "available": 50
+      },
+      "Rent": {
+        "assigned": 0,
+        "activity": 0,
+        "available": 0
+      },
+      "Utilities": {
+        "assigned": 0,
+        "activity": 0,
+        "available": -50
+      }
+    }
+  },
+  "ynabBehaviorNotes": [
+    "This test verifies the complete month rollover process:",
+    "SETUP PHASE (June 2025):",
+    "- Create budget with $3000 in checking account",
+    "- Assign money to categories: Groceries $200, Rent $1000, Utilities $100",
+    "- Create transactions: Groceries -$150, Rent -$1000, Utilities -$150",
+    "- June state: Groceries available +$50, Rent available $0, Utilities available -$50",
+    "",
+    "ROLLOVER TRIGGER:",
+    "- Request main data for July 2025 (userDate: 2025-07-01, userYear: 2025, userMonth: 7)",
+    "- This triggers checkAndHandleMonthRollover() in main-data.service.ts",
+    "- System detects no July balances exist and creates them from June balances",
+    "",
+    "EXPECTED JULY 2025 STATE (after rollover):",
+    "1. ASSIGNED AMOUNTS: All reset to $0 (new month starts fresh)",
+    "2. ACTIVITY: All reset to $0 (no transactions yet in July)",
+    "3. AVAILABLE BALANCES: Carried forward from June:",
+    "   - Groceries: +$50 (leftover money from June)",
+    "   - Rent: $0 (spent exactly what was assigned in June)",
+    "   - Utilities: -$50 (overspent in June, debt carries forward)",
+    "4. READY TO ASSIGN: $1700 (account balance since no money assigned in July yet)",
+    "5. ACCOUNT BALANCE: Unchanged at $1700 (account balances don't reset)",
+    "",
+    "This test validates the core month rollover logic that makes YNAB work correctly across month boundaries."
+  ]
+}

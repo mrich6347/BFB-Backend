@@ -14,7 +14,7 @@ export interface TestScenario {
 export interface TestStep {
   action: 'create_budget' | 'create_account' | 'create_category_group' | 'create_category' |
           'create_transaction' | 'delete_transaction' | 'update_transaction' | 'delete_category' |
-          'assign_money' | 'move_money_to_ready_to_assign' | 'get_state';
+          'assign_money' | 'move_money_to_ready_to_assign' | 'get_state' | 'trigger_month_rollover';
   description: string;
   params: any;
   expectedResult?: any;
@@ -77,21 +77,27 @@ export class YnabTestRunner {
       console.log('✅ Database cleaned\n');
 
       // Execute each step
+      let lastStepResult: any = null;
       for (let i = 0; i < scenario.steps.length; i++) {
         const step = scenario.steps[i];
         console.log(`📍 Step ${i + 1}: ${step.description}`);
-        
+
         const stepResult = await this.executeStep(step);
         result.steps.push(stepResult);
-        
+
         if (!stepResult.success) {
           result.errors.push(`Step ${i + 1} failed: ${stepResult.error}`);
           break;
         }
+
+        // Store the result if it's a get_state action (for final state comparison)
+        if (step.action === 'get_state' || step.action === 'trigger_month_rollover') {
+          lastStepResult = stepResult.data;
+        }
       }
 
-      // Get final state
-      result.finalState = await this.getCurrentState();
+      // Use the last state result if available, otherwise get current state
+      result.finalState = lastStepResult || await this.getCurrentState();
       
       // Compare with expected state
       const comparison = this.compareStates(result.finalState, scenario.expectedFinalState);
@@ -133,7 +139,9 @@ export class YnabTestRunner {
         case 'move_money_to_ready_to_assign':
           return await this.moveMoneyToReadyToAssign(step.params);
         case 'get_state':
-          return await this.getState();
+          return await this.getState(step.params);
+        case 'trigger_month_rollover':
+          return await this.triggerMonthRollover(step.params);
         default:
           throw new Error(`Unknown action: ${step.action}`);
       }
@@ -366,14 +374,45 @@ export class YnabTestRunner {
     return { success: false, error: response.body.message || 'Failed to move money to ready to assign' };
   }
 
-  private async getState(): Promise<StepResult> {
-    const state = await this.getCurrentState();
+  private async getState(params?: any): Promise<StepResult> {
+    const state = await this.getCurrentState(params);
     return { success: true, data: state };
   }
 
-  private async getCurrentState(): Promise<any> {
+  private async triggerMonthRollover(params: any): Promise<StepResult> {
+    // Request main data with user date context for the target month
     const response = await request(this.app.getHttpServer())
       .get(`/main-data/${this.testData.budgetId}`)
+      .set('Authorization', `Bearer ${this.authToken}`)
+      .query({
+        userDate: params.userDate,
+        userYear: params.userYear,
+        userMonth: params.userMonth
+      });
+
+    if (response.status === 200) {
+      return { success: true, data: response.body };
+    }
+    return { success: false, error: response.body.message || 'Failed to trigger month rollover' };
+  }
+
+  private async getCurrentState(params?: any): Promise<any> {
+    let url = `/main-data/${this.testData.budgetId}`;
+
+    // Add query parameters if provided
+    if (params?.userDate || params?.userYear || params?.userMonth) {
+      const queryParams = new URLSearchParams();
+      if (params.userDate) queryParams.append('userDate', params.userDate);
+      if (params.userYear) queryParams.append('userYear', params.userYear.toString());
+      if (params.userMonth) queryParams.append('userMonth', params.userMonth.toString());
+      url += `?${queryParams.toString()}`;
+      console.log('🔍 getCurrentState called with URL:', url);
+    } else {
+      console.log('🔍 getCurrentState called without date context, URL:', url);
+    }
+
+    const response = await request(this.app.getHttpServer())
+      .get(url)
       .set('Authorization', `Bearer ${this.authToken}`);
 
     return response.body;
@@ -458,7 +497,7 @@ export class YnabTestRunner {
 
   private async setupTestUser() {
     // Using updated auth token provided by user
-    this.authToken = 'eyJhbGciOiJIUzI1NiIsImtpZCI6ImZOODlYcTM1akNFdlFBQloiLCJ0eXAiOiJKV1QifQ.eyJpc3MiOiJodHRwczovL2Z4enRveWJma2ltb3lub3hhenBiLnN1cGFiYXNlLmNvL2F1dGgvdjEiLCJzdWIiOiI0MDIzYTNlOC0yMGMzLTRjZGEtYTEyNS0yYjhhNWE4NGZhNzAiLCJhdWQiOiJhdXRoZW50aWNhdGVkIiwiZXhwIjoxNzQ5OTM5MzY3LCJpYXQiOjE3NDk5MzU3NjcsImVtYWlsIjoicmljaC5tYXR0aGV3akBnbWFpbC5jb20iLCJwaG9uZSI6IiIsImFwcF9tZXRhZGF0YSI6eyJwcm92aWRlciI6ImVtYWlsIiwicHJvdmlkZXJzIjpbImVtYWlsIl19LCJ1c2VyX21ldGFkYXRhIjp7ImVtYWlsIjoicmljaC5tYXR0aGV3akBnbWFpbC5jb20iLCJlbWFpbF92ZXJpZmllZCI6dHJ1ZSwicGhvbmVfdmVyaWZpZWQiOmZhbHNlLCJzdWIiOiI0MDIzYTNlOC0yMGMzLTRjZGEtYTEyNS0yYjhhNWE4NGZhNzAifSwicm9sZSI6ImF1dGhlbnRpY2F0ZWQiLCJhYWwiOiJhYWwxIiwiYW1yIjpbeyJtZXRob2QiOiJwYXNzd29yZCIsInRpbWVzdGFtcCI6MTc0OTkzNTc2N31dLCJzZXNzaW9uX2lkIjoiY2I1MzBkMDItYjUzMC00NzI2LWIwMmQtZWZiYzdiMDhhOTE2IiwiaXNfYW5vbnltb3VzIjpmYWxzZX0.M2FGzFQH-DmU8fGpFLj-sFcKqK1CMRTZc8cTCKIRz6M';
+    this.authToken = 'eyJhbGciOiJIUzI1NiIsImtpZCI6ImZOODlYcTM1akNFdlFBQloiLCJ0eXAiOiJKV1QifQ.eyJpc3MiOiJodHRwczovL2Z4enRveWJma2ltb3lub3hhenBiLnN1cGFiYXNlLmNvL2F1dGgvdjEiLCJzdWIiOiI0MDIzYTNlOC0yMGMzLTRjZGEtYTEyNS0yYjhhNWE4NGZhNzAiLCJhdWQiOiJhdXRoZW50aWNhdGVkIiwiZXhwIjoxNzUwMDIyNzYyLCJpYXQiOjE3NTAwMTkxNjIsImVtYWlsIjoicmljaC5tYXR0aGV3akBnbWFpbC5jb20iLCJwaG9uZSI6IiIsImFwcF9tZXRhZGF0YSI6eyJwcm92aWRlciI6ImVtYWlsIiwicHJvdmlkZXJzIjpbImVtYWlsIl19LCJ1c2VyX21ldGFkYXRhIjp7ImVtYWlsIjoicmljaC5tYXR0aGV3akBnbWFpbC5jb20iLCJlbWFpbF92ZXJpZmllZCI6dHJ1ZSwicGhvbmVfdmVyaWZpZWQiOmZhbHNlLCJzdWIiOiI0MDIzYTNlOC0yMGMzLTRjZGEtYTEyNS0yYjhhNWE4NGZhNzAifSwicm9sZSI6ImF1dGhlbnRpY2F0ZWQiLCJhYWwiOiJhYWwxIiwiYW1yIjpbeyJtZXRob2QiOiJwYXNzd29yZCIsInRpbWVzdGFtcCI6MTc1MDAxNTIxOX1dLCJzZXNzaW9uX2lkIjoiNjM0MjQxYzItOWQ3OS00NjU3LTg2MzQtYzhjNWRlYzliOWE1IiwiaXNfYW5vbnltb3VzIjpmYWxzZX0.IlqK_lX298YwNpnjtgByHp3YLGXZBdQrHa2tNCgf7uY';
     this.userId = '4023a3e8-20c3-4cda-a125-2b8a5a84fa70'; // Extracted from JWT payload
 
     console.log('🔐 Using updated auth token');
