@@ -1,5 +1,6 @@
-import { IsString, IsNumber, IsUUID, IsArray, ValidateNested, Min } from 'class-validator';
+import { IsString, IsNumber, IsUUID, IsArray, ValidateNested, Min, IsOptional } from 'class-validator';
 import { Type } from 'class-transformer';
+import { WithUserDateContext } from '../../common/interfaces/user-date-context.interface';
 
 export class CreateAutoAssignConfigurationItemDto {
   @IsString()
@@ -52,13 +53,26 @@ export class AutoAssignConfigurationResponse {
   updated_at: string;
 }
 
-export class ApplyAutoAssignConfigurationDto {
+export class ApplyAutoAssignConfigurationDto implements WithUserDateContext {
   @IsString()
   name: string;
 
   @IsString()
   @IsUUID()
   budget_id: string;
+
+  // User date context for timezone handling
+  @IsString()
+  @IsOptional()
+  userDate?: string;
+
+  @IsNumber()
+  @IsOptional()
+  userYear?: number;
+
+  @IsNumber()
+  @IsOptional()
+  userMonth?: number;
 }
 
 export class AutoAssignConfigurationSummary {

@@ -70,6 +70,6 @@ export class AutoAssignController {
     @Req() req: any
   ): Promise<{ success: boolean; appliedCount: number; readyToAssign: number; appliedCategories: { category_id: string; amount: number }[] }> {
     const authToken = this.authService.getAuthToken(req);
-    return this.autoAssignService.apply(applyDto, req.user.id, authToken);
+    return this.autoAssignService.apply(applyDto, req.user.id, authToken, applyDto);
   }
 }

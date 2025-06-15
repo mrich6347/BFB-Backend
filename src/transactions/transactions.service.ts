@@ -3,6 +3,7 @@ import { SupabaseClient } from '@supabase/supabase-js';
 import { SupabaseService } from '../supabase/supabase.service';
 import { CreateTransactionDto, UpdateTransactionDto, TransactionResponse, TransactionWithAccountsResponse, TransactionDeleteResponse } from './dto/transaction.dto';
 import { CategoryBalancesService } from '../category-balances/category-balances.service';
+import { UserDateContextUtils } from '../common/interfaces/user-date-context.interface';
 import { v4 as uuidv4 } from 'uuid';
 
 @Injectable()
@@ -100,7 +101,10 @@ export class TransactionsService {
             data.date,
             data.amount,
             userId,
-            authToken
+            authToken,
+            createTransactionDto.userDate,
+            createTransactionDto.userYear,
+            createTransactionDto.userMonth
           );
         } catch (activityError) {
           console.error('Error updating category activity:', activityError);
@@ -286,7 +290,10 @@ export class TransactionsService {
             originalTransaction.date,
             -originalTransaction.amount, // Reverse the original amount
             userId,
-            authToken
+            authToken,
+            updateTransactionDto.userDate,
+            updateTransactionDto.userYear,
+            updateTransactionDto.userMonth
           );
         }
 
@@ -301,7 +308,10 @@ export class TransactionsService {
             dateToUse,
             amountDifference,
             userId,
-            authToken
+            authToken,
+            updateTransactionDto.userDate,
+            updateTransactionDto.userYear,
+            updateTransactionDto.userMonth
           );
         }
 
@@ -313,7 +323,10 @@ export class TransactionsService {
             data.date,
             data.amount,
             userId,
-            authToken
+            authToken,
+            updateTransactionDto.userDate,
+            updateTransactionDto.userYear,
+            updateTransactionDto.userMonth
           );
         }
 
@@ -326,7 +339,10 @@ export class TransactionsService {
             originalTransaction.date,
             -data.amount,
             userId,
-            authToken
+            authToken,
+            updateTransactionDto.userDate,
+            updateTransactionDto.userYear,
+            updateTransactionDto.userMonth
           );
 
           // Add to new date
@@ -336,7 +352,10 @@ export class TransactionsService {
             data.date,
             data.amount,
             userId,
-            authToken
+            authToken,
+            updateTransactionDto.userDate,
+            updateTransactionDto.userYear,
+            updateTransactionDto.userMonth
           );
         }
       } catch (activityError) {
@@ -568,20 +587,16 @@ export class TransactionsService {
     transactionDate: string,
     amount: number,
     userId: string,
-    authToken: string
+    authToken: string,
+    userCurrentDate?: string
   ): Promise<void> {
     // Validate transaction date - no future transactions allowed
-    const transactionDateObj = new Date(transactionDate);
-    const today = new Date();
-    today.setHours(23, 59, 59, 999); // End of today
-
-    if (transactionDateObj > today) {
+    if (!UserDateContextUtils.validateTransactionDate(transactionDate, userCurrentDate)) {
       throw new Error('Future transactions are not allowed');
     }
 
     // Extract year and month from transaction date for activity tracking
-    const transactionYear = transactionDateObj.getFullYear();
-    const transactionMonth = transactionDateObj.getMonth() + 1;
+    const { year: transactionYear, month: transactionMonth } = UserDateContextUtils.getYearMonthFromDate(transactionDate);
 
     console.log(`🔄 Updating ONLY activity for category ${categoryId} in ${transactionYear}-${transactionMonth} by ${amount}`);
 
@@ -613,25 +628,25 @@ export class TransactionsService {
     transactionDate: string,
     amount: number,
     userId: string,
-    authToken: string
+    authToken: string,
+    userCurrentDate?: string,
+    userCurrentYear?: number,
+    userCurrentMonth?: number
   ): Promise<void> {
     // Validate transaction date - no future transactions allowed
-    const transactionDateObj = new Date(transactionDate);
-    const today = new Date();
-    today.setHours(23, 59, 59, 999); // End of today
-
-    if (transactionDateObj > today) {
+    if (!UserDateContextUtils.validateTransactionDate(transactionDate, userCurrentDate)) {
       throw new Error('Future transactions are not allowed');
     }
 
     // Extract year and month from transaction date for activity tracking
-    const transactionYear = transactionDateObj.getFullYear();
-    const transactionMonth = transactionDateObj.getMonth() + 1;
+    const { year: transactionYear, month: transactionMonth } = UserDateContextUtils.getYearMonthFromDate(transactionDate);
 
-    // Get current year and month for available balance updates
-    const currentDate = new Date();
-    const currentYear = currentDate.getFullYear();
-    const currentMonth = currentDate.getMonth() + 1;
+    // Get current year and month for available balance updates (use user context if provided)
+    const { year: currentYear, month: currentMonth } = UserDateContextUtils.getCurrentUserDate({
+      userYear: userCurrentYear,
+      userMonth: userCurrentMonth,
+      userDate: userCurrentDate
+    });
 
     // Update activity for the transaction's actual month
     await this.updateActivityForMonth(
@@ -641,7 +656,9 @@ export class TransactionsService {
       transactionMonth,
       amount,
       userId,
-      authToken
+      authToken,
+      currentYear,
+      currentMonth
     );
 
     // Update available balance for current month (only if different from transaction month)
@@ -668,7 +685,9 @@ export class TransactionsService {
     month: number,
     amount: number,
     userId: string,
-    authToken: string
+    authToken: string,
+    currentYear: number,
+    currentMonth: number
   ): Promise<void> {
     const existingBalance = await this.categoryBalancesService.findByCategory(
       categoryId,
@@ -681,11 +700,6 @@ export class TransactionsService {
     if (existingBalance) {
       // Update existing balance - only update activity
       const newActivity = (existingBalance.activity || 0) + amount;
-
-      // For current month transactions, also update available
-      const currentDate = new Date();
-      const currentYear = currentDate.getFullYear();
-      const currentMonth = currentDate.getMonth() + 1;
 
       const updateData: any = { activity: newActivity };
 
@@ -704,10 +718,6 @@ export class TransactionsService {
       );
     } else {
       // Create new balance record for the transaction month
-      const currentDate = new Date();
-      const currentYear = currentDate.getFullYear();
-      const currentMonth = currentDate.getMonth() + 1;
-
       const balanceData: any = {
         activity: amount,
         assigned: 0

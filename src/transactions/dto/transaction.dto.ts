@@ -1,6 +1,7 @@
 import { IsString, IsNumber, IsBoolean, IsOptional, IsUUID, IsDateString } from 'class-validator';
+import { WithUserDateContext } from '../../common/interfaces/user-date-context.interface';
 
-export class CreateTransactionDto {
+export class CreateTransactionDto implements WithUserDateContext {
   @IsString()
   @IsUUID()
   account_id: string;
@@ -35,9 +36,22 @@ export class CreateTransactionDto {
   @IsUUID()
   @IsOptional()
   transfer_id?: string;
+
+  // User date context for timezone handling
+  @IsString()
+  @IsOptional()
+  userDate?: string;
+
+  @IsNumber()
+  @IsOptional()
+  userYear?: number;
+
+  @IsNumber()
+  @IsOptional()
+  userMonth?: number;
 }
 
-export class UpdateTransactionDto {
+export class UpdateTransactionDto implements WithUserDateContext {
   @IsDateString()
   @IsOptional()
   date?: string;
@@ -70,6 +84,19 @@ export class UpdateTransactionDto {
   @IsUUID()
   @IsOptional()
   transfer_id?: string;
+
+  // User date context for timezone handling
+  @IsString()
+  @IsOptional()
+  userDate?: string;
+
+  @IsNumber()
+  @IsOptional()
+  userYear?: number;
+
+  @IsNumber()
+  @IsOptional()
+  userMonth?: number;
 }
 
 export class TransactionResponse {

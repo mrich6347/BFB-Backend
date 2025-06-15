@@ -8,6 +8,7 @@ import { CategoryBalancesService } from '../category-balances/category-balances.
 import { ReadyToAssignService } from '../ready-to-assign/ready-to-assign.service';
 import { TransactionsService } from '../transactions/transactions.service';
 import { AutoAssignService } from '../auto-assign/auto-assign.service';
+import { UserDateContextUtils, WithUserDateContext } from '../common/interfaces/user-date-context.interface';
 
 @Injectable()
 export class MainDataService {
@@ -22,16 +23,16 @@ export class MainDataService {
         private readonly autoAssignService: AutoAssignService
     ) {}
 
-    async getMainData(budgetId: string, authToken: string, userId: string): Promise<MainDataResponse> {
+    async getMainData(budgetId: string, authToken: string, userId: string, userDateContext?: WithUserDateContext): Promise<MainDataResponse> {
         // First, check if we need to roll over to current month
-        await this.checkAndHandleMonthRollover(budgetId, userId, authToken);
+        await this.checkAndHandleMonthRollover(budgetId, userId, authToken, userDateContext);
 
         const [budget, accounts, categoryGroups, categories, categoryBalances, transactions, readyToAssign, autoAssignConfigurations] = await Promise.all([
             this.budgetsService.findOne(budgetId, userId, authToken),
             this.accountsService.findAll(userId, authToken, budgetId),
             this.categoryGroupsService.findAll(budgetId, userId, authToken),
             this.categoriesService.findAllByBudgetWithoutBalances(budgetId, userId, authToken),
-            this.categoryBalancesService.findAllByBudget(budgetId, userId, authToken), // Now only returns current month
+            this.categoryBalancesService.findAllByBudget(budgetId, userId, authToken, userDateContext), // Now only returns current month
             this.transactionsService.findAllByBudget(budgetId, userId, authToken),
             this.readyToAssignService.calculateReadyToAssign(budgetId, userId, authToken),
             this.autoAssignService.findAllByBudget(budgetId, userId, authToken)
@@ -50,10 +51,9 @@ export class MainDataService {
         }
     }
 
-    private async checkAndHandleMonthRollover(budgetId: string, userId: string, authToken: string): Promise<void> {
-        const now = new Date();
-        const currentYear = now.getFullYear();
-        const currentMonth = now.getMonth() + 1;
+    private async checkAndHandleMonthRollover(budgetId: string, userId: string, authToken: string, userDateContext?: WithUserDateContext): Promise<void> {
+        // Get current year and month (use user context if provided)
+        const { year: currentYear, month: currentMonth } = UserDateContextUtils.getCurrentUserDate(userDateContext);
 
         // Check if current month balances exist
         const currentMonthBalances = await this.categoryBalancesService.findByBudgetAndMonth(

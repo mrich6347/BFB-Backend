@@ -10,6 +10,7 @@ import {
   ApplyAutoAssignConfigurationDto
 } from './dto/auto-assign.dto';
 import { SupabaseClient } from '@supabase/supabase-js';
+import { UserDateContextUtils, WithUserDateContext } from '../common/interfaces/user-date-context.interface';
 
 @Injectable()
 export class AutoAssignService {
@@ -195,7 +196,7 @@ export class AutoAssignService {
     }
   }
 
-  async apply(applyDto: ApplyAutoAssignConfigurationDto, userId: string, authToken: string): Promise<{ success: boolean; appliedCount: number; readyToAssign: number; appliedCategories: { category_id: string; amount: number }[] }> {
+  async apply(applyDto: ApplyAutoAssignConfigurationDto, userId: string, authToken: string, userDateContext?: WithUserDateContext): Promise<{ success: boolean; appliedCount: number; readyToAssign: number; appliedCategories: { category_id: string; amount: number }[] }> {
     const supabase = this.supabaseService.getAuthenticatedClient(authToken);
 
     // Get configuration items
@@ -214,10 +215,8 @@ export class AutoAssignService {
       throw new Error('Configuration not found');
     }
 
-    // Get current month for balance updates
-    const now = new Date();
-    const year = now.getFullYear();
-    const month = now.getMonth() + 1;
+    // Get current month for balance updates (use user context if provided)
+    const { year, month } = UserDateContextUtils.getCurrentUserDate(userDateContext);
 
     // Use batch update for better performance
     const result = await this.categoriesService.batchUpdateAssigned(

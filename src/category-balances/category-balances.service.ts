@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { SupabaseService } from '../supabase/supabase.service';
 import { CreateCategoryBalanceDto, UpdateCategoryBalanceDto, CategoryBalanceResponse } from './dto/category-balance.dto';
+import { UserDateContextUtils, WithUserDateContext } from '../common/interfaces/user-date-context.interface';
 
 @Injectable()
 export class CategoryBalancesService {
@@ -67,13 +68,11 @@ export class CategoryBalancesService {
     return data || [];
   }
 
-  async findAllByBudget(budgetId: string, userId: string, authToken: string): Promise<CategoryBalanceResponse[]> {
+  async findAllByBudget(budgetId: string, userId: string, authToken: string, userDateContext?: WithUserDateContext): Promise<CategoryBalanceResponse[]> {
     const supabase = this.supabaseService.getAuthenticatedClient(authToken);
 
-    // Only return current month balances
-    const now = new Date();
-    const currentYear = now.getFullYear();
-    const currentMonth = now.getMonth() + 1;
+    // Get current year and month (use user context if provided)
+    const { year: currentYear, month: currentMonth } = UserDateContextUtils.getCurrentUserDate(userDateContext);
 
     const { data, error } = await supabase
       .from('category_balances')
