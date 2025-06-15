@@ -21,11 +21,15 @@ export class DatabaseManagementService {
   private async getUserTables(supabase: SupabaseClient): Promise<string[]> {
     // These are the tables we know have user data and should be cleared
     // The order is important to avoid foreign key constraint errors
+    // Delete child tables first, then parent tables
     return [
-      'categories',
-      'category_groups',
-      'accounts',
-      'budgets'
+      'transactions',           // Must be first - references accounts and categories
+      'category_balances',      // References categories
+      'auto_assign_configurations', // References categories and budgets
+      'categories',             // References category_groups and budgets
+      'category_groups',        // References budgets
+      'accounts',               // References budgets
+      'budgets'                 // Parent table - delete last
     ];
   }
 

@@ -259,8 +259,14 @@ export class YnabTestRunner {
       .delete(`/transactions/${transactionId}`)
       .set('Authorization', `Bearer ${this.authToken}`);
 
-    if (response.status === 200) {
+    if (response.status === 200 || response.status === 204) {
       delete this.testData.transactions[params.payee];
+
+      // Add a small delay to ensure database changes are committed
+      // This prevents race conditions where the final state is retrieved
+      // before the deletion and account balance updates are fully committed
+      await new Promise(resolve => setTimeout(resolve, 100));
+
       return { success: true, data: response.body };
     }
     return { success: false, error: response.body.message || 'Failed to delete transaction' };
@@ -497,7 +503,7 @@ export class YnabTestRunner {
 
   private async setupTestUser() {
     // Using updated auth token provided by user
-    this.authToken = 'eyJhbGciOiJIUzI1NiIsImtpZCI6ImZOODlYcTM1akNFdlFBQloiLCJ0eXAiOiJKV1QifQ.eyJpc3MiOiJodHRwczovL2Z4enRveWJma2ltb3lub3hhenBiLnN1cGFiYXNlLmNvL2F1dGgvdjEiLCJzdWIiOiI0MDIzYTNlOC0yMGMzLTRjZGEtYTEyNS0yYjhhNWE4NGZhNzAiLCJhdWQiOiJhdXRoZW50aWNhdGVkIiwiZXhwIjoxNzUwMDIyNzYyLCJpYXQiOjE3NTAwMTkxNjIsImVtYWlsIjoicmljaC5tYXR0aGV3akBnbWFpbC5jb20iLCJwaG9uZSI6IiIsImFwcF9tZXRhZGF0YSI6eyJwcm92aWRlciI6ImVtYWlsIiwicHJvdmlkZXJzIjpbImVtYWlsIl19LCJ1c2VyX21ldGFkYXRhIjp7ImVtYWlsIjoicmljaC5tYXR0aGV3akBnbWFpbC5jb20iLCJlbWFpbF92ZXJpZmllZCI6dHJ1ZSwicGhvbmVfdmVyaWZpZWQiOmZhbHNlLCJzdWIiOiI0MDIzYTNlOC0yMGMzLTRjZGEtYTEyNS0yYjhhNWE4NGZhNzAifSwicm9sZSI6ImF1dGhlbnRpY2F0ZWQiLCJhYWwiOiJhYWwxIiwiYW1yIjpbeyJtZXRob2QiOiJwYXNzd29yZCIsInRpbWVzdGFtcCI6MTc1MDAxNTIxOX1dLCJzZXNzaW9uX2lkIjoiNjM0MjQxYzItOWQ3OS00NjU3LTg2MzQtYzhjNWRlYzliOWE1IiwiaXNfYW5vbnltb3VzIjpmYWxzZX0.IlqK_lX298YwNpnjtgByHp3YLGXZBdQrHa2tNCgf7uY';
+    this.authToken = 'eyJhbGciOiJIUzI1NiIsImtpZCI6ImZOODlYcTM1akNFdlFBQloiLCJ0eXAiOiJKV1QifQ.eyJpc3MiOiJodHRwczovL2Z4enRveWJma2ltb3lub3hhenBiLnN1cGFiYXNlLmNvL2F1dGgvdjEiLCJzdWIiOiI0MDIzYTNlOC0yMGMzLTRjZGEtYTEyNS0yYjhhNWE4NGZhNzAiLCJhdWQiOiJhdXRoZW50aWNhdGVkIiwiZXhwIjoxNzUwMDI2MzIzLCJpYXQiOjE3NTAwMjI3MjMsImVtYWlsIjoicmljaC5tYXR0aGV3akBnbWFpbC5jb20iLCJwaG9uZSI6IiIsImFwcF9tZXRhZGF0YSI6eyJwcm92aWRlciI6ImVtYWlsIiwicHJvdmlkZXJzIjpbImVtYWlsIl19LCJ1c2VyX21ldGFkYXRhIjp7ImVtYWlsIjoicmljaC5tYXR0aGV3akBnbWFpbC5jb20iLCJlbWFpbF92ZXJpZmllZCI6dHJ1ZSwicGhvbmVfdmVyaWZpZWQiOmZhbHNlLCJzdWIiOiI0MDIzYTNlOC0yMGMzLTRjZGEtYTEyNS0yYjhhNWE4NGZhNzAifSwicm9sZSI6ImF1dGhlbnRpY2F0ZWQiLCJhYWwiOiJhYWwxIiwiYW1yIjpbeyJtZXRob2QiOiJwYXNzd29yZCIsInRpbWVzdGFtcCI6MTc1MDAxNTIxOX1dLCJzZXNzaW9uX2lkIjoiNjM0MjQxYzItOWQ3OS00NjU3LTg2MzQtYzhjNWRlYzliOWE1IiwiaXNfYW5vbnltb3VzIjpmYWxzZX0.5dKVUmWOWECdVMjLKKjTXeiUdWWOLn7Anpo_u9YKGvo';
     this.userId = '4023a3e8-20c3-4cda-a125-2b8a5a84fa70'; // Extracted from JWT payload
 
     console.log('🔐 Using updated auth token');

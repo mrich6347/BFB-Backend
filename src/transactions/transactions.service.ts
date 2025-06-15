@@ -475,15 +475,20 @@ export class TransactionsService {
     }
 
     // Now delete the transaction
-    const { error } = await supabase
+    console.log(`🗑️ Deleting transaction with ID: ${id} for user: ${userId}`);
+    const { data: deleteResult, error } = await supabase
       .from('transactions')
       .delete()
       .eq('id', id)
-      .eq('user_id', userId);
+      .eq('user_id', userId)
+      .select('*');
 
     if (error) {
+      console.error(`❌ Error deleting transaction:`, error);
       throw new Error(error.message);
     }
+
+    console.log(`✅ Transaction deleted successfully:`, JSON.stringify(deleteResult, null, 2));
 
     // Update account balances after deleting transaction
     try {
@@ -1022,7 +1027,7 @@ export class TransactionsService {
     });
 
     // Update the account with new balances
-    const { error: updateError } = await supabase
+    const { data: updateResult, error: updateError } = await supabase
       .from('accounts')
       .update({
         cleared_balance: newClearedBalance,
@@ -1030,7 +1035,8 @@ export class TransactionsService {
         working_balance: newWorkingBalance
       })
       .eq('id', accountId)
-      .eq('user_id', userId);
+      .eq('user_id', userId)
+      .select('*');
 
     if (updateError) {
       console.error(`❌ Error updating account balances:`, updateError);
@@ -1038,6 +1044,7 @@ export class TransactionsService {
     }
 
     console.log(`✅ Successfully updated account balances for account: ${accountId}`);
+    console.log(`📊 Updated account data:`, JSON.stringify(updateResult, null, 2));
   }
 
   /**
