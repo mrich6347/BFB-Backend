@@ -165,7 +165,7 @@ export class AccountsService {
     if (Math.abs(currentBalance) > 0.001) { // Use small epsilon for floating point comparison
       const adjustmentAmount = -currentBalance; // Opposite of current balance to zero it out
 
-      adjustmentTransaction = await this.transactionsService.create({
+      const transactionResult = await this.transactionsService.create({
         account_id: accountId,
         date: new Date().toISOString().split('T')[0], // Today's date
         amount: adjustmentAmount,
@@ -175,6 +175,9 @@ export class AccountsService {
         is_cleared: true,
         is_reconciled: false
       }, userId, authToken);
+
+      // Extract transaction from result (could be TransactionResponse or TransactionWithAccountsResponse)
+      adjustmentTransaction = 'transaction' in transactionResult ? transactionResult.transaction : transactionResult;
     }
 
     // Set account as inactive and zero out balances
@@ -266,7 +269,7 @@ export class AccountsService {
 
     // If there's a balance change, create an adjustment transaction
     if (Math.abs(adjustmentAmount) > 0.001) { // Use small epsilon for floating point comparison
-      adjustmentTransaction = await this.transactionsService.create({
+      const transactionResult = await this.transactionsService.create({
         account_id: accountId,
         date: new Date().toISOString().split('T')[0], // Today's date
         amount: adjustmentAmount,
@@ -276,6 +279,9 @@ export class AccountsService {
         is_cleared: true,
         is_reconciled: false
       }, userId, authToken);
+
+      // Extract transaction from result (could be TransactionResponse or TransactionWithAccountsResponse)
+      adjustmentTransaction = 'transaction' in transactionResult ? transactionResult.transaction : transactionResult;
     }
 
     // Update account balance to the new balance
@@ -425,7 +431,7 @@ export class AccountsService {
 
     // If there's a discrepancy, create an adjustment transaction
     if (Math.abs(adjustmentAmount) > 0.001) { // Use small epsilon for floating point comparison
-      adjustmentTransaction = await this.transactionsService.create({
+      const transactionResult = await this.transactionsService.create({
         account_id: accountId,
         date: new Date().toISOString().split('T')[0], // Today's date
         amount: adjustmentAmount,
@@ -435,6 +441,9 @@ export class AccountsService {
         is_cleared: true,
         is_reconciled: true
       }, userId, authToken);
+
+      // Extract transaction from result (could be TransactionResponse or TransactionWithAccountsResponse)
+      adjustmentTransaction = 'transaction' in transactionResult ? transactionResult.transaction : transactionResult;
     }
 
     // Mark all cleared transactions as reconciled

@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { SupabaseClient } from '@supabase/supabase-js';
 import { SupabaseService } from '../supabase/supabase.service';
-import { CreateTransactionDto, UpdateTransactionDto, TransactionResponse } from './dto/transaction.dto';
+import { CreateTransactionDto, UpdateTransactionDto, TransactionResponse, TransactionWithAccountsResponse, TransactionDeleteResponse } from './dto/transaction.dto';
 import { CategoryBalancesService } from '../category-balances/category-balances.service';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -16,7 +16,7 @@ export class TransactionsService {
     this.supabase = this.supabaseService.client;
   }
 
-  async create(createTransactionDto: CreateTransactionDto, userId: string, authToken: string): Promise<TransactionResponse> {
+  async create(createTransactionDto: CreateTransactionDto, userId: string, authToken: string): Promise<TransactionResponse | TransactionWithAccountsResponse> {
     const supabase = this.supabaseService.getAuthenticatedClient(authToken);
 
     // Check if this is a transfer transaction
@@ -118,6 +118,29 @@ export class TransactionsService {
       // Don't throw here - transaction was created successfully, balance update is secondary
     }
 
+    // For transfer transactions, return both account balances
+    if (isTransfer) {
+      try {
+        const budgetId = await this.getBudgetIdFromAccount(data.account_id, userId, authToken);
+        if (budgetId) {
+          const targetAccountName = this.parseTransferAccountName(data.payee || '');
+          const targetAccount = await this.getAccountByName(targetAccountName, budgetId, userId, authToken);
+
+          const sourceAccountDetails = await this.getAccountDetails(data.account_id, userId, authToken);
+          const targetAccountDetails = await this.getAccountDetails(targetAccount.id, userId, authToken);
+
+          return {
+            transaction: data,
+            sourceAccount: sourceAccountDetails,
+            targetAccount: targetAccountDetails
+          };
+        }
+      } catch (accountError) {
+        console.error('Error getting account details for transfer response:', accountError);
+        // Fall back to regular response
+      }
+    }
+
     return data;
   }
 
@@ -196,7 +219,7 @@ export class TransactionsService {
     return data;
   }
 
-  async update(id: string, updateTransactionDto: UpdateTransactionDto, userId: string, authToken: string): Promise<TransactionResponse> {
+  async update(id: string, updateTransactionDto: UpdateTransactionDto, userId: string, authToken: string): Promise<TransactionResponse | TransactionWithAccountsResponse> {
     const supabase = this.supabaseService.getAuthenticatedClient(authToken);
 
     // First get the original transaction to compare changes
@@ -335,10 +358,42 @@ export class TransactionsService {
       // Don't throw here - transaction was updated successfully, balance update is secondary
     }
 
+    // For transfer transactions, return both account balances
+    if (data.transfer_id) {
+      try {
+        const supabase = this.supabaseService.getAuthenticatedClient(authToken);
+
+        // Get both the linked transaction and account details in parallel for better performance
+        const [linkedTransactionResult, sourceAccountResult] = await Promise.all([
+          supabase
+            .from('transactions')
+            .select('account_id')
+            .eq('transfer_id', data.transfer_id)
+            .eq('user_id', userId)
+            .neq('id', data.id)
+            .single(),
+          this.getAccountDetails(data.account_id, userId, authToken)
+        ]);
+
+        if (linkedTransactionResult.data && !linkedTransactionResult.error) {
+          const targetAccountDetails = await this.getAccountDetails(linkedTransactionResult.data.account_id, userId, authToken);
+
+          return {
+            transaction: data,
+            sourceAccount: sourceAccountResult,
+            targetAccount: targetAccountDetails
+          };
+        }
+      } catch (accountError) {
+        console.error('Error getting account details for transfer update response:', accountError);
+        // Fall back to regular response
+      }
+    }
+
     return data;
   }
 
-  async remove(id: string, userId: string, authToken: string): Promise<void> {
+  async remove(id: string, userId: string, authToken: string): Promise<void | TransactionDeleteResponse> {
     const supabase = this.supabaseService.getAuthenticatedClient(authToken);
 
     // First get the transaction to reverse its activity
@@ -403,6 +458,38 @@ export class TransactionsService {
     } catch (balanceError) {
       console.error('Error updating account balances:', balanceError);
       // Don't throw here - transaction was deleted successfully, balance update is secondary
+    }
+
+    // For transfer transactions, return both account balances
+    if (transaction.transfer_id) {
+      try {
+        const supabase = this.supabaseService.getAuthenticatedClient(authToken);
+
+        // Get the linked transaction account ID and both account details in parallel
+        const { data: linkedTransaction } = await supabase
+          .from('transactions')
+          .select('account_id')
+          .eq('transfer_id', transaction.transfer_id)
+          .eq('user_id', userId)
+          .neq('id', transaction.id)
+          .single();
+
+        if (linkedTransaction) {
+          // Get both account details in parallel for better performance
+          const [sourceAccountDetails, targetAccountDetails] = await Promise.all([
+            this.getAccountDetails(transaction.account_id, userId, authToken),
+            this.getAccountDetails(linkedTransaction.account_id, userId, authToken)
+          ]);
+
+          return {
+            sourceAccount: sourceAccountDetails,
+            targetAccount: targetAccountDetails
+          };
+        }
+      } catch (accountError) {
+        console.error('Error getting account details for transfer delete response:', accountError);
+        // Fall back to void response
+      }
     }
   }
 
@@ -1037,21 +1124,7 @@ export class TransactionsService {
   ): Promise<void> {
     const supabase = this.supabaseService.getAuthenticatedClient(authToken);
 
-    // Find the linked transfer transaction
-    const { data: linkedTransaction, error: findError } = await supabase
-      .from('transactions')
-      .select('*')
-      .eq('transfer_id', originalTransaction.transfer_id)
-      .eq('user_id', userId)
-      .neq('id', originalTransaction.id)
-      .single();
-
-    if (findError || !linkedTransaction) {
-      console.error('Linked transfer transaction not found:', findError);
-      return;
-    }
-
-    // Update the linked transaction with corresponding changes
+    // Build the update payload for the linked transaction
     const linkedUpdatePayload: any = {};
 
     // Update date if changed
@@ -1074,21 +1147,29 @@ export class TransactionsService {
       linkedUpdatePayload.is_cleared = updatedTransaction.is_cleared;
     }
 
-    // Only update if there are changes
-    if (Object.keys(linkedUpdatePayload).length > 0) {
-      const { error: updateError } = await supabase
-        .from('transactions')
-        .update(linkedUpdatePayload)
-        .eq('id', linkedTransaction.id)
-        .eq('user_id', userId);
+    // Only proceed if there are changes
+    if (Object.keys(linkedUpdatePayload).length === 0) {
+      return;
+    }
 
-      if (updateError) {
-        throw new Error(`Failed to update linked transfer transaction: ${updateError.message}`);
-      }
+    // Update the linked transaction and get its account_id in one query
+    const { data: updatedLinkedTransaction, error: updateError } = await supabase
+      .from('transactions')
+      .update(linkedUpdatePayload)
+      .eq('transfer_id', originalTransaction.transfer_id)
+      .eq('user_id', userId)
+      .neq('id', originalTransaction.id)
+      .select('account_id')
+      .single();
 
-      // Update account balances for the linked transaction's account
+    if (updateError) {
+      throw new Error(`Failed to update linked transfer transaction: ${updateError.message}`);
+    }
+
+    // Update account balances for the linked transaction's account
+    if (updatedLinkedTransaction) {
       try {
-        await this.updateAccountBalances(linkedTransaction.account_id, userId, authToken);
+        await this.updateAccountBalances(updatedLinkedTransaction.account_id, userId, authToken);
       } catch (balanceError) {
         console.error('Error updating linked account balances:', balanceError);
       }
@@ -1134,6 +1215,23 @@ export class TransactionsService {
     } catch (balanceError) {
       console.error('Error updating linked account balances after deletion:', balanceError);
     }
+  }
+
+  private async getAccountDetails(accountId: string, userId: string, authToken: string): Promise<any> {
+    const supabase = this.supabaseService.getAuthenticatedClient(authToken);
+
+    const { data, error } = await supabase
+      .from('accounts')
+      .select('id, name, account_type, budget_id, account_balance, cleared_balance, uncleared_balance, working_balance, is_active')
+      .eq('id', accountId)
+      .eq('user_id', userId)
+      .single();
+
+    if (error) {
+      throw new Error(`Failed to get account details: ${error.message}`);
+    }
+
+    return data;
   }
 
 

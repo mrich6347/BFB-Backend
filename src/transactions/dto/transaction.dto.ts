@@ -87,3 +87,14 @@ export class TransactionResponse {
   created_at: string;
   updated_at: string;
 }
+
+export class TransactionWithAccountsResponse {
+  transaction: TransactionResponse;
+  sourceAccount?: any; // AccountResponse from accounts module
+  targetAccount?: any; // AccountResponse from accounts module
+}
+
+export class TransactionDeleteResponse {
+  sourceAccount?: any; // AccountResponse from accounts module
+  targetAccount?: any; // AccountResponse from accounts module
+}

@@ -1,6 +1,6 @@
 import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards, Req, Query, ParseUUIDPipe } from '@nestjs/common';
 import { TransactionsService } from './transactions.service';
-import { CreateTransactionDto, UpdateTransactionDto, TransactionResponse } from './dto/transaction.dto';
+import { CreateTransactionDto, UpdateTransactionDto, TransactionResponse, TransactionWithAccountsResponse, TransactionDeleteResponse } from './dto/transaction.dto';
 import { SupabaseAuthGuard } from '../guards/auth.guard';
 import { AuthService } from '../configurations/auth/auth.service';
 
@@ -13,7 +13,7 @@ export class TransactionsController {
   ) {}
 
   @Post()
-  async create(@Body() createTransactionDto: CreateTransactionDto, @Req() req: any): Promise<TransactionResponse> {
+  async create(@Body() createTransactionDto: CreateTransactionDto, @Req() req: any): Promise<TransactionResponse | TransactionWithAccountsResponse> {
     const authToken = this.authService.getAuthToken(req);
     return this.transactionsService.create(createTransactionDto, req.user.id, authToken);
   }
@@ -38,7 +38,7 @@ export class TransactionsController {
     @Param('id', ParseUUIDPipe) id: string,
     @Body() updateTransactionDto: UpdateTransactionDto,
     @Req() req: any
-  ): Promise<TransactionResponse> {
+  ): Promise<TransactionResponse | TransactionWithAccountsResponse> {
     const authToken = this.authService.getAuthToken(req);
     return this.transactionsService.update(id, updateTransactionDto, req.user.id, authToken);
   }
@@ -50,7 +50,7 @@ export class TransactionsController {
   }
 
   @Delete(':id')
-  async remove(@Param('id', ParseUUIDPipe) id: string, @Req() req: any): Promise<void> {
+  async remove(@Param('id', ParseUUIDPipe) id: string, @Req() req: any): Promise<void | TransactionDeleteResponse> {
     const authToken = this.authService.getAuthToken(req);
     return this.transactionsService.remove(id, req.user.id, authToken);
   }
