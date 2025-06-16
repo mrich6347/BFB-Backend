@@ -538,10 +538,129 @@ export class CategoriesService {
     month: number
   ): Promise<{ successCount: number; appliedCategories: { category_id: string; amount: number }[] }> {
     const supabase = this.supabaseService.getAuthenticatedClient(authToken);
+
+    if (updates.length === 0) {
+      return { successCount: 0, appliedCategories: [] };
+    }
+
+    try {
+      // Extract category IDs for bulk operations
+      const categoryIds = updates.map(u => u.category_id);
+
+      // Pre-fetch all required data in bulk
+      const [categoriesResult, balancesResult] = await Promise.all([
+        // Get budget_ids for all categories
+        supabase
+          .from('categories')
+          .select('id, budget_id')
+          .in('id', categoryIds)
+          .eq('user_id', userId),
+
+        // Get current balances for all categories
+        supabase
+          .from('category_balances')
+          .select('category_id, assigned, available')
+          .in('category_id', categoryIds)
+          .eq('user_id', userId)
+          .eq('year', year)
+          .eq('month', month)
+      ]);
+
+      if (categoriesResult.error) {
+        throw new Error(`Failed to fetch categories: ${categoriesResult.error.message}`);
+      }
+
+      if (balancesResult.error) {
+        throw new Error(`Failed to fetch balances: ${balancesResult.error.message}`);
+      }
+
+      // Create lookup maps for efficient access
+      const categoryMap = new Map(categoriesResult.data?.map(c => [c.id, c.budget_id]) || []);
+      const balanceMap = new Map(balancesResult.data?.map(b => [b.category_id, b]) || []);
+
+      // Prepare upsert data
+      const upsertData: any[] = [];
+      const appliedCategories: { category_id: string; amount: number }[] = [];
+
+      for (const update of updates) {
+        const budgetId = categoryMap.get(update.category_id);
+        if (!budgetId) {
+          console.error(`Category not found: ${update.category_id}`);
+          continue;
+        }
+
+        const currentBalance = balanceMap.get(update.category_id);
+        let newAssigned: number;
+        let newAvailable: number;
+
+        if (currentBalance) {
+          // For auto-assign, we ADD the amount to existing assigned (not set to that amount)
+          newAssigned = (currentBalance.assigned || 0) + update.amount;
+          // Update available by adding the difference (YNAB behavior)
+          newAvailable = (currentBalance.available || 0) + update.amount;
+        } else {
+          // No existing balance, so available equals assigned for new records
+          newAssigned = update.amount;
+          newAvailable = update.amount;
+        }
+
+        upsertData.push({
+          category_id: update.category_id,
+          budget_id: budgetId,
+          user_id: userId,
+          year: year,
+          month: month,
+          assigned: newAssigned,
+          activity: 0, // Default for new records, existing records will keep their activity
+          available: newAvailable
+        });
+
+        appliedCategories.push({
+          category_id: update.category_id,
+          amount: update.amount // This represents the amount added, not the total assigned
+        });
+      }
+
+      // Perform bulk upsert operation
+      const { error: upsertError } = await supabase
+        .from('category_balances')
+        .upsert(upsertData, {
+          onConflict: 'category_id,user_id,year,month',
+          ignoreDuplicates: false
+        });
+
+      if (upsertError) {
+        throw new Error(`Failed to upsert balances: ${upsertError.message}`);
+      }
+
+      return {
+        successCount: appliedCategories.length,
+        appliedCategories
+      };
+
+    } catch (error) {
+      console.error('Batch update assigned failed:', error);
+      // Fallback to individual processing if bulk operation fails
+      return this.batchUpdateAssignedFallback(updates, userId, authToken, year, month);
+    }
+  }
+
+  /**
+   * Fallback method for batch update when bulk operation fails
+   * Uses the original sequential approach for reliability
+   */
+  private async batchUpdateAssignedFallback(
+    updates: { category_id: string; amount: number }[],
+    userId: string,
+    authToken: string,
+    year: number,
+    month: number
+  ): Promise<{ successCount: number; appliedCategories: { category_id: string; amount: number }[] }> {
+    const supabase = this.supabaseService.getAuthenticatedClient(authToken);
     let successCount = 0;
     const appliedCategories: { category_id: string; amount: number }[] = [];
 
-    // Process updates in batches for better performance
+    // Process updates individually as fallback
     for (const update of updates) {
       try {
         // Get current balance for this category
@@ -554,21 +673,14 @@ export class CategoriesService {
           .eq('month', month)
           .single();
 
-        let assignedDifference = 0;
         let newAssigned = update.amount;
         let newAvailable = update.amount;
 
         if (currentBalance) {
           // For auto-assign, we ADD the amount to existing assigned (not set to that amount)
           newAssigned = (currentBalance.assigned || 0) + update.amount;
-          assignedDifference = update.amount; // The amount we're adding
           // Update available by adding the difference (YNAB behavior)
-          newAvailable = (currentBalance.available || 0) + assignedDifference;
-        } else {
-          // No existing balance, so available equals assigned for new records
-          assignedDifference = update.amount;
-          newAvailable = update.amount;
-          newAssigned = update.amount;
+          newAvailable = (currentBalance.available || 0) + update.amount;
         }
 
         // Update or create balance record
@@ -623,8 +735,6 @@ export class CategoriesService {
             continue;
           }
         }
-
-
 
         successCount++;
         appliedCategories.push({
