@@ -1,6 +1,10 @@
 import { IsString, IsEnum, IsNumber, IsBoolean, IsOptional, IsUUID } from 'class-validator';
 import { Transform } from 'class-transformer';
-import { AccountType } from '../entities/account.entity';
+
+export enum AccountType {
+    CASH = 'CASH',
+    TRACKING = 'TRACKING'
+}
 
 export class CreateAccountDto {
     @IsString()

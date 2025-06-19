@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { SupabaseService } from '../../supabase/supabase.service';
 import { SupabaseClient } from '@supabase/supabase-js';
-import { AccountType } from '../accounts/entities/account.entity';
+import { AccountType } from '../accounts/DTO/account.dto';
 
 @Injectable()
 export class ReadyToAssignService {
