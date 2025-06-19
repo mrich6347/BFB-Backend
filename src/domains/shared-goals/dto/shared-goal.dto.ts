@@ -103,6 +103,7 @@ export class SharedGoalResponse {
   target_amount: number;
   target_date?: Date;
   created_by: string;
+  budget_id?: string; // Optional since it's derived from participants
   status: GoalStatus;
   is_private: boolean;
   created_at: Date;

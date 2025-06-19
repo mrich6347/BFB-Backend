@@ -68,7 +68,7 @@ export class SharedGoalsService {
     return transformedData;
   }
 
-  async findByUserId(userId: string, authToken: string): Promise<SharedGoalResponse[]> {
+  async findByUserId(userId: string, budgetId: string, authToken: string): Promise<SharedGoalResponse[]> {
     const supabase = this.supabaseService.getAuthenticatedClient(authToken);
     
     // Get user's profile
@@ -82,7 +82,7 @@ export class SharedGoalsService {
       return [];
     }
 
-    // Get goals where user is creator or participant
+    // Get goals where user is creator or participant for the specific budget
     const { data, error } = await supabase
       .from('shared_goals')
       .select(`
@@ -95,6 +95,7 @@ export class SharedGoalsService {
       `)
       .or(`created_by.eq.${userProfile.id},participants.user_profile_id.eq.${userProfile.id}`)
       .eq('participants.status', ParticipantStatus.ACTIVE)
+      .eq('participants.budget_id', budgetId)
       .order('created_at', { ascending: false });
 
     if (error) {
@@ -103,14 +104,19 @@ export class SharedGoalsService {
     }
 
     // Transform the response to match our DTO structure
-    const transformedData: SharedGoalResponse[] = (data || []).map(goal => ({
-      ...goal,
-      creator_profile: Array.isArray(goal.creator_profile) ? goal.creator_profile[0] : goal.creator_profile,
-      participants: goal.participants?.map(participant => ({
+    const transformedData: SharedGoalResponse[] = (data || []).map(goal => {
+      const transformedParticipants = goal.participants?.map(participant => ({
         ...participant,
         user_profile: Array.isArray(participant.user_profile) ? participant.user_profile[0] : participant.user_profile
-      }))
-    }));
+      }));
+
+      return {
+        ...goal,
+        creator_profile: Array.isArray(goal.creator_profile) ? goal.creator_profile[0] : goal.creator_profile,
+        participants: transformedParticipants,
+        budget_id: budgetId // Set the budget_id from the parameter
+      };
+    });
 
     return transformedData;
   }

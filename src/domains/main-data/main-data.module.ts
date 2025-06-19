@@ -10,6 +10,8 @@ import { CategoryBalancesModule } from '../category-balances/category-balances.m
 import { ReadyToAssignModule } from '../ready-to-assign/ready-to-assign.module';
 import { TransactionsModule } from '../transactions/transactions.module';
 import { AutoAssignModule } from '../auto-assign/auto-assign.module';
+import { UserProfilesModule } from '../user-profiles/user-profiles.module';
+import { SharedGoalsModule } from '../shared-goals/shared-goals.module';
 
 @Module({
   controllers: [MainDataController],
@@ -23,7 +25,9 @@ import { AutoAssignModule } from '../auto-assign/auto-assign.module';
     CategoryBalancesModule,
     ReadyToAssignModule,
     TransactionsModule,
-    AutoAssignModule
+    AutoAssignModule,
+    UserProfilesModule,
+    SharedGoalsModule
   ],
 })
 export class MainDataModule {}

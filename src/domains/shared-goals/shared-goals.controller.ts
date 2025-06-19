@@ -1,14 +1,15 @@
-import { 
-  Controller, 
-  Get, 
-  Post, 
-  Body, 
-  Put, 
-  Param, 
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  Put,
+  Param,
   Delete,
-  UseGuards, 
-  Req, 
-  ParseUUIDPipe 
+  Query,
+  UseGuards,
+  Req,
+  ParseUUIDPipe
 } from '@nestjs/common';
 import { SharedGoalsService } from './shared-goals.service';
 import { 
@@ -34,9 +35,9 @@ export class SharedGoalsController {
   }
 
   @Get()
-  async findAll(@Req() req: any): Promise<SharedGoalResponse[]> {
+  async findAll(@Query('budgetId') budgetId: string, @Req() req: any): Promise<SharedGoalResponse[]> {
     const authToken = this.authService.getAuthToken(req);
-    return this.sharedGoalsService.findByUserId(req.user.id, authToken);
+    return this.sharedGoalsService.findByUserId(req.user.id, budgetId, authToken);
   }
 
   @Get(':id')

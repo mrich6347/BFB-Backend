@@ -8,6 +8,8 @@ import { CategoryBalancesService } from '../category-balances/category-balances.
 import { ReadyToAssignService } from '../ready-to-assign/ready-to-assign.service';
 import { TransactionsService } from '../transactions/transactions.service';
 import { AutoAssignService } from '../auto-assign/auto-assign.service';
+import { UserProfilesService } from '../user-profiles/user-profiles.service';
+import { SharedGoalsService } from '../shared-goals/shared-goals.service';
 import { UserDateContextUtils, WithUserDateContext } from '../../common/interfaces/user-date-context.interface';
 
 @Injectable()
@@ -20,14 +22,16 @@ export class MainDataService {
         private readonly categoryBalancesService: CategoryBalancesService,
         private readonly readyToAssignService: ReadyToAssignService,
         private readonly transactionsService: TransactionsService,
-        private readonly autoAssignService: AutoAssignService
+        private readonly autoAssignService: AutoAssignService,
+        private readonly userProfilesService: UserProfilesService,
+        private readonly sharedGoalsService: SharedGoalsService
     ) {}
 
     async getMainData(budgetId: string, authToken: string, userId: string, userDateContext?: WithUserDateContext): Promise<MainDataResponse> {
         // First, check if we need to roll over to current month
         await this.checkAndHandleMonthRollover(budgetId, userId, authToken, userDateContext);
 
-        const [budget, accounts, categoryGroups, categories, categoryBalances, transactions, readyToAssign, autoAssignConfigurations] = await Promise.all([
+        const [budget, accounts, categoryGroups, categories, categoryBalances, transactions, readyToAssign, autoAssignConfigurations, userProfile, sharedGoals] = await Promise.all([
             this.budgetsService.findOne(budgetId, userId, authToken),
             this.accountsService.findAll(userId, authToken, budgetId),
             this.categoryGroupsService.findAll(budgetId, userId, authToken),
@@ -35,7 +39,9 @@ export class MainDataService {
             this.categoryBalancesService.findAllByBudget(budgetId, userId, authToken, userDateContext), // Now only returns current month
             this.transactionsService.findAllByBudget(budgetId, userId, authToken),
             this.readyToAssignService.calculateReadyToAssign(budgetId, userId, authToken),
-            this.autoAssignService.findAllByBudget(budgetId, userId, authToken)
+            this.autoAssignService.findAllByBudget(budgetId, userId, authToken),
+            this.userProfilesService.findByUserId(userId, authToken),
+            this.sharedGoalsService.findByUserId(userId, budgetId, authToken)
         ]);
 
 
@@ -47,7 +53,9 @@ export class MainDataService {
            categoryBalances,
            transactions,
            readyToAssign,
-           autoAssignConfigurations
+           autoAssignConfigurations,
+           userProfile: userProfile || undefined,
+           sharedGoals
         }
     }
 
