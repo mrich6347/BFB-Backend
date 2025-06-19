@@ -15,12 +15,25 @@ export class DatabaseManagementController {
   async nukeDatabase(@Req() req: any): Promise<{ success: boolean; message: string }> {
     const authToken = this.authService.getAuthToken(req);
     const userId = req.user.id;
-    
+
     await this.databaseManagementService.nukeDatabase(userId, authToken);
-    
+
     return {
       success: true,
       message: 'Database has been successfully wiped.'
+    };
+  }
+
+  @Post('populate')
+  async populateDatabase(@Req() req: any): Promise<{ success: boolean; message: string }> {
+    const authToken = this.authService.getAuthToken(req);
+    const userId = req.user.id;
+
+    await this.databaseManagementService.populateDatabase(userId, authToken);
+
+    return {
+      success: true,
+      message: 'Database has been successfully populated with sample data.'
     };
   }
 }
