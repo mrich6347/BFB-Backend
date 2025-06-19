@@ -1,22 +1,19 @@
-import { 
-  Controller, 
-  Get, 
-  Post, 
-  Body, 
-  Put, 
-  Param, 
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  Put,
   Query,
-  UseGuards, 
-  Req, 
-  NotFoundException 
+  UseGuards,
+  Req
 } from '@nestjs/common';
 import { UserProfilesService } from './user-profiles.service';
-import { 
-  CreateUserProfileDto, 
-  UpdateUserProfileDto, 
-  UserProfileResponse, 
-  PublicUserProfileResponse,
-  SearchUserProfileDto 
+import {
+  CreateUserProfileDto,
+  UpdateUserProfileDto,
+  UserProfileResponse,
+  PublicUserProfileResponse
 } from './dto/user-profile.dto';
 import { SupabaseAuthGuard } from '../../guards/auth.guard';
 import { AuthService } from '../../configurations/auth/auth.service';
@@ -36,15 +33,12 @@ export class UserProfilesController {
   }
 
   @Get('me')
-  async getCurrentUserProfile(@Req() req: any): Promise<UserProfileResponse> {
+  async getCurrentUserProfile(@Req() req: any): Promise<UserProfileResponse | null> {
     const authToken = this.authService.getAuthToken(req);
     const profile = await this.userProfilesService.findByUserId(req.user.id, authToken);
-    
-    if (!profile) {
-      throw new NotFoundException('User profile not found');
-    }
-    
-    return profile;
+
+    // Return null if no profile exists yet - this is expected for new users
+    return profile || null;
   }
 
   @Put('me')
@@ -70,18 +64,5 @@ export class UserProfilesController {
     return this.userProfilesService.searchByUsername(username.trim(), authToken);
   }
 
-  @Get(':username')
-  async findByUsername(
-    @Param('username') username: string, 
-    @Req() req: any
-  ): Promise<PublicUserProfileResponse> {
-    const authToken = this.authService.getAuthToken(req);
-    const profile = await this.userProfilesService.findByUsername(username, authToken);
-    
-    if (!profile) {
-      throw new NotFoundException(`User profile with username '${username}' not found`);
-    }
-    
-    return profile;
-  }
+  // Removed findByUsername endpoint - username availability is now checked during create/update
 }
