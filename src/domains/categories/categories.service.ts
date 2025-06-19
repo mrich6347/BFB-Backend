@@ -905,7 +905,7 @@ export class CategoriesService {
     month: number,
     userId: string,
     authToken: string
-  ): Promise<void> {
+  ): Promise<CategoryUpdateWithAffectedCategoriesResponse> {
     const supabase = this.supabaseService.getAuthenticatedClient(authToken);
 
     // Validate that the source category exists and belongs to the user
@@ -963,7 +963,31 @@ export class CategoriesService {
       throw new Error(updateError.message);
     }
 
+    // Calculate updated Ready to Assign
+    const readyToAssign = await this.readyToAssignService.calculateReadyToAssign(
+      category.budget_id,
+      userId,
+      authToken
+    );
 
+    // Get the updated category balance
+    const { data: updatedBalance, error: updatedBalanceError } = await supabase
+      .from('category_balances')
+      .select('*')
+      .eq('category_id', sourceCategoryId)
+      .eq('user_id', userId)
+      .eq('year', year)
+      .eq('month', month)
+      .single();
+
+    if (updatedBalanceError) {
+      throw new Error(updatedBalanceError.message);
+    }
+
+    return {
+      readyToAssign,
+      categoryBalance: updatedBalance
+    };
   }
 
   async pullFromReadyToAssign(
