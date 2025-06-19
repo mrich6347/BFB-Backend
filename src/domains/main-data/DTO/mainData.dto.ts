@@ -18,5 +18,5 @@ export class MainDataResponse {
     readyToAssign: number;
     autoAssignConfigurations: AutoAssignConfigurationSummary[];
     userProfile?: UserProfileResponse;
-    sharedGoals?: SharedGoalResponse[];
+    sharedGoals: SharedGoalResponse[];
 }
