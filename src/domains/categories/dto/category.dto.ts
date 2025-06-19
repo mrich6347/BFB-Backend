@@ -122,6 +122,7 @@ export class CategoryWithReadyToAssignResponse {
 
 export class CategoryUpdateWithAffectedCategoriesResponse {
   readyToAssign: number;
+  category: CategoryResponse; // The updated category data
   categoryBalance: CategoryBalanceResponse; // The updated balance
   affectedCategories?: CategoryResponse[]; // Payment categories that were updated due to debt coverage
 }

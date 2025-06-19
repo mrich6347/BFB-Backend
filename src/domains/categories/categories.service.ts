@@ -370,6 +370,7 @@ export class CategoriesService {
 
     return {
       readyToAssign: result.readyToAssign,
+      category: result.category, // Include the updated category data
       categoryBalance,
       affectedCategories: affectedCategories.length > 0 ? affectedCategories : undefined
     };
@@ -1023,8 +1024,29 @@ export class CategoriesService {
       throw new Error(updatedBalanceError.message);
     }
 
+    // Get the category data for the response
+    const { data: categoryData, error: categoryDataError } = await supabase
+      .from('categories')
+      .select('*')
+      .eq('id', sourceCategoryId)
+      .eq('user_id', userId)
+      .single();
+
+    if (categoryDataError) {
+      throw new Error(categoryDataError.message);
+    }
+
+    // Return category with default balance values (frontend will merge with actual balances)
+    const categoryResponse: CategoryResponse = {
+      ...categoryData,
+      assigned: 0,
+      activity: 0,
+      available: 0
+    };
+
     return {
       readyToAssign,
+      category: categoryResponse,
       categoryBalance: updatedBalance
     };
   }
@@ -1136,8 +1158,29 @@ export class CategoriesService {
       throw new Error(updatedBalanceError.message);
     }
 
+    // Get the category data for the response
+    const { data: categoryData, error: categoryDataError } = await supabase
+      .from('categories')
+      .select('*')
+      .eq('id', destinationCategoryId)
+      .eq('user_id', userId)
+      .single();
+
+    if (categoryDataError) {
+      throw new Error(categoryDataError.message);
+    }
+
+    // Return category with default balance values (frontend will merge with actual balances)
+    const categoryResponse: CategoryResponse = {
+      ...categoryData,
+      assigned: 0,
+      activity: 0,
+      available: 0
+    };
+
     return {
       readyToAssign,
+      category: categoryResponse,
       categoryBalance: updatedBalance
     };
   }
