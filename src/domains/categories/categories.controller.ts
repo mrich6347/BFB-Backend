@@ -102,7 +102,7 @@ export class CategoriesController {
   }
 
   @Post('pull-from-ready-to-assign')
-  async pullFromReadyToAssign(@Body() pullFromReadyToAssignDto: PullFromReadyToAssignDto, @Req() req: any): Promise<void> {
+  async pullFromReadyToAssign(@Body() pullFromReadyToAssignDto: PullFromReadyToAssignDto, @Req() req: any): Promise<CategoryUpdateWithAffectedCategoriesResponse> {
     const authToken = this.authService.getAuthToken(req);
     return this.categoriesService.pullFromReadyToAssign(
       pullFromReadyToAssignDto.destinationCategoryId,
