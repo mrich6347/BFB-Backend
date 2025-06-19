@@ -326,17 +326,33 @@ export class CategoriesService {
       authToken
     );
 
-    // Return category with default balance values (frontend will merge with actual balances)
+    // Get the actual updated category balance for the current month
+    let categoryBalance: any = null;
+    if (year && month) {
+      const { data: balance } = await supabase
+        .from('category_balances')
+        .select('*')
+        .eq('category_id', id)
+        .eq('user_id', userId)
+        .eq('year', year)
+        .eq('month', month)
+        .single();
+
+      categoryBalance = balance;
+    }
+
+    // Return category with actual balance values if available, otherwise defaults
     const category: CategoryResponse = {
       ...categoryData,
-      assigned: 0,
-      activity: 0,
-      available: 0
+      assigned: categoryBalance?.assigned || 0,
+      activity: categoryBalance?.activity || 0,
+      available: categoryBalance?.available || 0
     };
 
     return {
       category,
-      readyToAssign
+      readyToAssign,
+      categoryBalance // Include the full balance record for frontend
     };
   }
 
@@ -352,7 +368,8 @@ export class CategoriesService {
     return {
       category: result.category,
       readyToAssign: result.readyToAssign,
-      affectedCategories: affectedCategories.length > 0 ? affectedCategories : undefined
+      affectedCategories: affectedCategories.length > 0 ? affectedCategories : undefined,
+      categoryBalance: result.categoryBalance
     };
   }
 
