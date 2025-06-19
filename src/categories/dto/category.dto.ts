@@ -111,15 +111,16 @@ export class CategoryResponse {
   updated_at: Date;
 }
 
+import { CategoryBalanceResponse } from '../../category-balances/dto/category-balance.dto';
+
 export class CategoryWithReadyToAssignResponse {
   category: CategoryResponse;
   readyToAssign: number;
-  categoryBalance?: any; // CategoryBalanceResponse - optional for backward compatibility
+  categoryBalance?: CategoryBalanceResponse; // Optional for backward compatibility
 }
 
 export class CategoryUpdateWithAffectedCategoriesResponse {
-  category: CategoryResponse;
   readyToAssign: number;
+  categoryBalance: CategoryBalanceResponse; // The updated balance
   affectedCategories?: CategoryResponse[]; // Payment categories that were updated due to debt coverage
-  categoryBalance: any; // CategoryBalanceResponse - the updated balance
 }

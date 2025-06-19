@@ -329,7 +329,7 @@ export class CategoriesService {
     // Get the actual updated category balance for the current month
     let categoryBalance: any = null;
     if (year && month) {
-      const { data: balance } = await supabase
+      const { data: balance, error: balanceError } = await supabase
         .from('category_balances')
         .select('*')
         .eq('category_id', id)
@@ -338,7 +338,16 @@ export class CategoriesService {
         .eq('month', month)
         .single();
 
+      if (balanceError) {
+        throw new Error(`Failed to fetch updated category balance: ${balanceError.message}`);
+      }
+
       categoryBalance = balance;
+    }
+
+    // For category balance updates, we should always have year/month and balance
+    if (!categoryBalance) {
+      throw new Error('Category balance is required for this operation');
     }
 
     // Return category with actual balance values if available, otherwise defaults
@@ -366,10 +375,9 @@ export class CategoriesService {
 
 
     return {
-      category: result.category,
       readyToAssign: result.readyToAssign,
-      affectedCategories: affectedCategories.length > 0 ? affectedCategories : undefined,
-      categoryBalance: result.categoryBalance
+      categoryBalance: result.categoryBalance!, // We've validated this exists above
+      affectedCategories: affectedCategories.length > 0 ? affectedCategories : undefined
     };
   }
 
