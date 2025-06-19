@@ -75,6 +75,9 @@ export class DatabaseManagementService {
 
     // Create historical transactions and balances for multiple months
     await this.createHistoricalData(supabase, userId, budget.id, accounts, categories);
+
+    // Create auto-assign configurations
+    await this.createSampleAutoAssignConfigurations(supabase, userId, budget.id, categories);
   }
 
   private async createSampleBudget(supabase: SupabaseClient, userId: string): Promise<any> {
@@ -352,7 +355,6 @@ export class DatabaseManagementService {
       const available = finalAssigned + activity;
 
       categoryBalances.push({
-        id: uuidv4(),
         category_id: category.id,
         budget_id: budgetId,
         user_id: userId,
@@ -415,7 +417,7 @@ export class DatabaseManagementService {
 
     // Generate data for the last 18 months for more comprehensive charts
     const currentDate = new Date();
-    const months = [];
+    const months: Array<{ year: number; month: number; date: Date }> = [];
 
     for (let i = 17; i >= 0; i--) {
       const date = new Date(currentDate.getFullYear(), currentDate.getMonth() - i, 1);
@@ -436,7 +438,7 @@ export class DatabaseManagementService {
           const dateStr = `${monthData.year}-${monthData.month.toString().padStart(2, '0')}`;
 
           // Simulate market volatility with different scenarios
-          let monthlyChanges = [];
+          let monthlyChanges: Array<{ amount: number; memo: string; day: number }> = [];
 
           if (i < 6) {
             // First 6 months: Bull market with occasional corrections
@@ -568,6 +570,97 @@ export class DatabaseManagementService {
 
       if (error) {
         throw new Error(`Failed to create tracking account transactions: ${error.message}`);
+      }
+    }
+  }
+
+  private async createSampleAutoAssignConfigurations(supabase: SupabaseClient, userId: string, budgetId: string, categories: any[]): Promise<void> {
+    // Create 5 different auto-assign configurations with various combinations of categories
+    const configurations = [
+      {
+        name: 'Monthly Essentials',
+        items: [
+          { category_name: 'Rent/Mortgage', amount: 1200 },
+          { category_name: 'Electric', amount: 120 },
+          { category_name: 'Water', amount: 60 },
+          { category_name: 'Internet', amount: 80 },
+          { category_name: 'Phone', amount: 100 }
+        ]
+      },
+      {
+        name: 'Food & Transportation',
+        items: [
+          { category_name: 'Groceries', amount: 400 },
+          { category_name: 'Gas', amount: 150 },
+          { category_name: 'Restaurants', amount: 200 }
+        ]
+      },
+      {
+        name: 'Savings Goals',
+        items: [
+          { category_name: 'Emergency Fund', amount: 500 },
+          { category_name: 'Vacation', amount: 200 },
+          { category_name: 'Car Replacement', amount: 300 }
+        ]
+      },
+      {
+        name: 'Personal Care & Fun',
+        items: [
+          { category_name: 'Personal Care', amount: 50 },
+          { category_name: 'Entertainment', amount: 150 },
+          { category_name: 'Hobbies', amount: 100 },
+          { category_name: 'Subscriptions', amount: 50 }
+        ]
+      },
+      {
+        name: 'Insurance & Protection',
+        items: [
+          { category_name: 'Insurance', amount: 200 },
+          { category_name: 'Emergency Fund', amount: 300 },
+          { category_name: 'Home Improvement', amount: 150 }
+        ]
+      }
+    ];
+
+    // Create a map of category names to IDs for easy lookup
+    const categoryMap = new Map();
+    categories.forEach(category => {
+      categoryMap.set(category.name, category.id);
+    });
+
+    // Insert each configuration
+    for (const config of configurations) {
+      const configItems: Array<{
+        id: string;
+        name: string;
+        budget_id: string;
+        user_id: string;
+        category_id: string;
+        amount: number;
+      }> = [];
+
+      for (const item of config.items) {
+        const categoryId = categoryMap.get(item.category_name);
+        if (categoryId) {
+          configItems.push({
+            id: uuidv4(),
+            name: config.name,
+            budget_id: budgetId,
+            user_id: userId,
+            category_id: categoryId,
+            amount: item.amount
+          });
+        }
+      }
+
+      if (configItems.length > 0) {
+        const { error } = await supabase
+          .from('auto_assign_configurations')
+          .insert(configItems);
+
+        if (error) {
+          throw new Error(`Failed to create auto-assign configuration '${config.name}': ${error.message}`);
+        }
       }
     }
   }
