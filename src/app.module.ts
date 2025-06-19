@@ -13,6 +13,8 @@ import { CategoryBalancesModule } from './domains/category-balances/category-bal
 import { DatabaseManagementModule } from './domains/database-management/database-management.module';
 import { TransactionsModule } from './domains/transactions/transactions.module';
 import { AutoAssignModule } from './domains/auto-assign/auto-assign.module';
+import { UserProfilesModule } from './domains/user-profiles/user-profiles.module';
+import { SharedGoalsModule } from './domains/shared-goals/shared-goals.module';
 
 @Module({
   imports: [
@@ -27,7 +29,9 @@ import { AutoAssignModule } from './domains/auto-assign/auto-assign.module';
     CategoryBalancesModule,
     DatabaseManagementModule,
     TransactionsModule,
-    AutoAssignModule
+    AutoAssignModule,
+    UserProfilesModule,
+    SharedGoalsModule
   ],
   controllers: [AppController],
   providers: [AppService],
