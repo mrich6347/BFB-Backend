@@ -777,7 +777,7 @@ export class CategoriesService {
     month: number,
     userId: string,
     authToken: string
-  ): Promise<void> {
+  ): Promise<{ readyToAssign: number; sourceCategoryBalance: any; destinationCategoryBalance: any }> {
     const supabase = this.supabaseService.getAuthenticatedClient(authToken);
 
     // Validate that both categories exist and belong to the user
@@ -893,7 +893,46 @@ export class CategoriesService {
       }
     }
 
+    // Calculate updated Ready to Assign (should remain the same since we're just moving between categories)
+    const readyToAssign = await this.readyToAssignService.calculateReadyToAssign(
+      sourceBudgetId,
+      userId,
+      authToken
+    );
 
+    // Get the updated source category balance
+    const { data: updatedSourceBalance, error: sourceBalanceError } = await supabase
+      .from('category_balances')
+      .select('*')
+      .eq('category_id', sourceCategoryId)
+      .eq('user_id', userId)
+      .eq('year', year)
+      .eq('month', month)
+      .single();
+
+    if (sourceBalanceError) {
+      throw new Error(sourceBalanceError.message);
+    }
+
+    // Get the updated destination category balance
+    const { data: updatedDestinationBalance, error: destinationBalanceError } = await supabase
+      .from('category_balances')
+      .select('*')
+      .eq('category_id', destinationCategoryId)
+      .eq('user_id', userId)
+      .eq('year', year)
+      .eq('month', month)
+      .single();
+
+    if (destinationBalanceError) {
+      throw new Error(destinationBalanceError.message);
+    }
+
+    return {
+      readyToAssign,
+      sourceCategoryBalance: updatedSourceBalance,
+      destinationCategoryBalance: updatedDestinationBalance
+    };
   }
 
 

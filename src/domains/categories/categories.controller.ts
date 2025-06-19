@@ -75,7 +75,7 @@ export class CategoriesController {
   }
 
   @Post('move-money')
-  async moveMoney(@Body() moveMoneyDto: MoveMoneyDto, @Req() req: any): Promise<void> {
+  async moveMoney(@Body() moveMoneyDto: MoveMoneyDto, @Req() req: any): Promise<{ readyToAssign: number; sourceCategoryBalance: any; destinationCategoryBalance: any }> {
     const authToken = this.authService.getAuthToken(req);
     return this.categoriesService.moveMoney(
       moveMoneyDto.sourceCategoryId,

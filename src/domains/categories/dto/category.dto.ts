@@ -125,3 +125,9 @@ export class CategoryUpdateWithAffectedCategoriesResponse {
   categoryBalance: CategoryBalanceResponse; // The updated balance
   affectedCategories?: CategoryResponse[]; // Payment categories that were updated due to debt coverage
 }
+
+export class MoveMoneyResponse {
+  readyToAssign: number;
+  sourceCategoryBalance: CategoryBalanceResponse;
+  destinationCategoryBalance: CategoryBalanceResponse;
+}
