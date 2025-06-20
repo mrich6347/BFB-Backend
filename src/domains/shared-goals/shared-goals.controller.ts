@@ -45,39 +45,8 @@ export class SharedGoalsController {
     return this.sharedGoalsService.findByUserId(req.user.id, budgetId, authToken);
   }
 
-  @Get(':id')
-  async findOne(@Param('id', new ParseUUIDPipe()) id: string, @Req() req: any): Promise<SharedGoalResponse> {
-    const authToken = this.authService.getAuthToken(req);
-    return this.sharedGoalsService.findById(id, req.user.id, authToken);
-  }
-
-  @Put(':id')
-  async update(
-    @Param('id', new ParseUUIDPipe()) id: string, 
-    @Body() updateSharedGoalDto: UpdateSharedGoalDto, 
-    @Req() req: any
-  ): Promise<SharedGoalResponse> {
-    const authToken = this.authService.getAuthToken(req);
-    return this.sharedGoalsService.update(id, updateSharedGoalDto, req.user.id, authToken);
-  }
-
-  @Delete(':id')
-  async remove(@Param('id', new ParseUUIDPipe()) id: string, @Req() req: any): Promise<void> {
-    const authToken = this.authService.getAuthToken(req);
-    return this.sharedGoalsService.delete(id, req.user.id, authToken);
-  }
-
   // ===== INVITATION ENDPOINTS =====
-
-  @Post(':id/invite')
-  async inviteUser(
-    @Param('id', new ParseUUIDPipe()) goalId: string,
-    @Body() createInvitationDto: CreateInvitationDto,
-    @Req() req: any
-  ): Promise<InvitationResponse> {
-    const authToken = this.authService.getAuthToken(req);
-    return this.sharedGoalsService.inviteUser(goalId, createInvitationDto, req.user.id, authToken);
-  }
+  // Note: These must come before the :id routes to avoid route conflicts
 
   @Get('invitations')
   async getInvitations(@Req() req: any): Promise<InvitationResponse[]> {
@@ -101,6 +70,38 @@ export class SharedGoalsController {
   ): Promise<void> {
     const authToken = this.authService.getAuthToken(req);
     return this.sharedGoalsService.declineInvitation(invitationId, req.user.id, authToken);
+  }
+
+  @Get(':id')
+  async findOne(@Param('id', new ParseUUIDPipe()) id: string, @Req() req: any): Promise<SharedGoalResponse> {
+    const authToken = this.authService.getAuthToken(req);
+    return this.sharedGoalsService.findById(id, req.user.id, authToken);
+  }
+
+  @Put(':id')
+  async update(
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Body() updateSharedGoalDto: UpdateSharedGoalDto,
+    @Req() req: any
+  ): Promise<SharedGoalResponse> {
+    const authToken = this.authService.getAuthToken(req);
+    return this.sharedGoalsService.update(id, updateSharedGoalDto, req.user.id, authToken);
+  }
+
+  @Delete(':id')
+  async remove(@Param('id', new ParseUUIDPipe()) id: string, @Req() req: any): Promise<void> {
+    const authToken = this.authService.getAuthToken(req);
+    return this.sharedGoalsService.delete(id, req.user.id, authToken);
+  }
+
+  @Post(':id/invite')
+  async inviteUser(
+    @Param('id', new ParseUUIDPipe()) goalId: string,
+    @Body() createInvitationDto: CreateInvitationDto,
+    @Req() req: any
+  ): Promise<InvitationResponse> {
+    const authToken = this.authService.getAuthToken(req);
+    return this.sharedGoalsService.inviteUser(goalId, createInvitationDto, req.user.id, authToken);
   }
 
   // ===== PARTICIPANT ENDPOINTS =====

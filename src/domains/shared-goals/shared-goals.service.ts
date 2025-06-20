@@ -109,19 +109,35 @@ export class SharedGoalsService {
     }
 
     // Query 2: Goals where user is a participant
-    const { data: participantGoals, error: participantError } = await supabase
-      .from('shared_goals')
-      .select(`
-        id, name, description, target_amount, target_date, created_by, status, created_at, updated_at,
-        creator_profile:user_profiles!shared_goals_created_by_fkey(username, display_name),
-        participants:goal_participants!inner(
-          id, goal_id, user_profile_id, monthly_contribution, category_id, budget_id, status, joined_at,
-          user_profile:user_profiles(username, display_name)
-        )
-      `)
-      .eq('participants.user_profile_id', userProfile.id)
-      .eq('participants.status', ParticipantStatus.ACTIVE)
-      .eq('participants.budget_id', budgetId);
+    // First, find goal IDs where user is a participant
+    const { data: userParticipations, error: participationError } = await supabase
+      .from('goal_participants')
+      .select('goal_id')
+      .eq('user_profile_id', userProfile.id)
+      .eq('status', ParticipantStatus.ACTIVE)
+      .eq('budget_id', budgetId);
+
+    if (participationError) {
+      console.log("ERROR finding user participations:", participationError);
+      throw new Error(participationError.message);
+    }
+
+    const participantGoalIds = userParticipations?.map(p => p.goal_id) || [];
+
+    // Now get the full goal data with all participants for those goals
+    const { data: participantGoals, error: participantError } = participantGoalIds.length > 0
+      ? await supabase
+          .from('shared_goals')
+          .select(`
+            id, name, description, target_amount, target_date, created_by, status, created_at, updated_at,
+            creator_profile:user_profiles!shared_goals_created_by_fkey(username, display_name),
+            participants:goal_participants(
+              id, goal_id, user_profile_id, monthly_contribution, category_id, budget_id, status, joined_at,
+              user_profile:user_profiles(username, display_name)
+            )
+          `)
+          .in('id', participantGoalIds)
+      : { data: [], error: null };
 
     if (participantError) {
       console.log("ERROR finding user's participant goals:", participantError);
@@ -134,22 +150,30 @@ export class SharedGoalsService {
       index === self.findIndex(g => g.id === goal.id)
     );
 
-    // Filter participants for the specific budget and transform the response
+    // Filter goals where user is either creator or participant, and get all active participants
     const validGoals = uniqueGoals.filter(goal => {
-      const filteredParticipants = goal.participants?.filter(p =>
-        p.budget_id === budgetId && p.status === ParticipantStatus.ACTIVE
+      // Check if user is creator
+      if (goal.created_by === userProfile.id) {
+        return true;
+      }
+
+      // Check if user is an active participant for the specific budget
+      const userParticipant = goal.participants?.find(p =>
+        p.user_profile_id === userProfile.id &&
+        p.budget_id === budgetId &&
+        p.status === ParticipantStatus.ACTIVE
       );
-      return filteredParticipants && filteredParticipants.length > 0;
+      return !!userParticipant;
     });
 
     const goalsWithProgress = await Promise.all(
       validGoals.map(async goal => {
-        // Filter participants to only include those for the specific budget
-        const filteredParticipants = goal.participants?.filter(p =>
-          p.budget_id === budgetId && p.status === ParticipantStatus.ACTIVE
+        // Show all active participants, not just those for the specific budget
+        const allActiveParticipants = goal.participants?.filter(p =>
+          p.status === ParticipantStatus.ACTIVE
         ) || [];
 
-        const transformedParticipants = filteredParticipants.map(participant => ({
+        const transformedParticipants = allActiveParticipants.map(participant => ({
           ...participant,
           user_profile: Array.isArray(participant.user_profile) ? participant.user_profile[0] : participant.user_profile
         }));
@@ -444,7 +468,8 @@ export class SharedGoalsService {
       .single();
 
     if (profileError || !userProfile) {
-      throw new NotFoundException('User profile not found');
+      // Return empty array if no profile exists - this is expected for new users
+      return [];
     }
 
     // Get all pending invitations for the user
