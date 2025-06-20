@@ -19,7 +19,8 @@ import {
   CreateInvitationDto,
   InvitationResponse,
   GoalParticipantResponse,
-  UpdateParticipantDto
+  UpdateParticipantDto,
+  GoalProgressResponse
 } from './dto/shared-goal.dto';
 import { SupabaseAuthGuard } from '../../guards/auth.guard';
 import { AuthService } from '../../configurations/auth/auth.service';
@@ -130,5 +131,16 @@ export class SharedGoalsController {
   ): Promise<void> {
     const authToken = this.authService.getAuthToken(req);
     return this.sharedGoalsService.updateParticipant(goalId, updateParticipantDto, req.user.id, authToken);
+  }
+
+  // ===== PROGRESS ENDPOINTS =====
+
+  @Get(':id/progress')
+  async getGoalProgress(
+    @Param('id', new ParseUUIDPipe()) goalId: string,
+    @Req() req: any
+  ): Promise<GoalProgressResponse> {
+    const authToken = this.authService.getAuthToken(req);
+    return this.sharedGoalsService.getGoalProgress(goalId, req.user.id, authToken);
   }
 }

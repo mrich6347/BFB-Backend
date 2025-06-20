@@ -179,3 +179,16 @@ export class GoalActivityResponse {
     display_name: string;
   };
 }
+
+export class ParticipantWithProgressResponse extends GoalParticipantResponse {
+  current_contribution: number;
+  contribution_percentage: number;
+}
+
+export class GoalProgressResponse {
+  goal: SharedGoalResponse;
+  current_amount: number;
+  progress_percentage: number;
+  projected_completion_date?: Date;
+  participants_with_progress: ParticipantWithProgressResponse[];
+}

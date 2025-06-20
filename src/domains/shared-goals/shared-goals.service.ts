@@ -1,24 +1,29 @@
 import { Injectable, NotFoundException, ForbiddenException, ConflictException } from '@nestjs/common';
 import { SupabaseClient } from '@supabase/supabase-js';
-import { 
-  CreateSharedGoalDto, 
-  UpdateSharedGoalDto, 
+import {
+  CreateSharedGoalDto,
+  UpdateSharedGoalDto,
   SharedGoalResponse,
   GoalParticipantResponse,
   CreateInvitationDto,
   InvitationResponse,
   UpdateParticipantDto,
+  GoalProgressResponse,
   GoalStatus,
   ParticipantStatus,
   InvitationStatus
 } from './dto/shared-goal.dto';
 import { SupabaseService } from '../../supabase/supabase.service';
+import { ProgressCalculationService } from './progress-calculation.service';
 
 @Injectable()
 export class SharedGoalsService {
   private supabase: SupabaseClient;
 
-  constructor(private supabaseService: SupabaseService) {
+  constructor(
+    private supabaseService: SupabaseService,
+    private progressCalculationService: ProgressCalculationService
+  ) {
     this.supabase = this.supabaseService.client;
   }
 
@@ -130,34 +135,57 @@ export class SharedGoalsService {
     );
 
     // Filter participants for the specific budget and transform the response
-    const transformedData: SharedGoalResponse[] = uniqueGoals
-      .map(goal => {
+    const validGoals = uniqueGoals.filter(goal => {
+      const filteredParticipants = goal.participants?.filter(p =>
+        p.budget_id === budgetId && p.status === ParticipantStatus.ACTIVE
+      );
+      return filteredParticipants && filteredParticipants.length > 0;
+    });
+
+    const goalsWithProgress = await Promise.all(
+      validGoals.map(async goal => {
         // Filter participants to only include those for the specific budget
         const filteredParticipants = goal.participants?.filter(p =>
           p.budget_id === budgetId && p.status === ParticipantStatus.ACTIVE
-        );
-
-        // Only include goals that have participants for this budget
-        if (!filteredParticipants || filteredParticipants.length === 0) {
-          return null;
-        }
+        ) || [];
 
         const transformedParticipants = filteredParticipants.map(participant => ({
           ...participant,
           user_profile: Array.isArray(participant.user_profile) ? participant.user_profile[0] : participant.user_profile
         }));
 
-        return {
+        // Calculate progress for this goal
+        let currentAmount = 0;
+        for (const participant of transformedParticipants) {
+          if (participant.category_id) {
+            const contribution = await this.progressCalculationService.getParticipantContribution(
+              participant.category_id,
+              participant.budget_id,
+              authToken
+            );
+            currentAmount += contribution;
+          }
+        }
+
+        const progressPercentage = goal.target_amount > 0
+          ? Math.min((currentAmount / goal.target_amount) * 100, 100)
+          : 0;
+
+        const transformedGoal: SharedGoalResponse = {
           ...goal,
           creator_profile: Array.isArray(goal.creator_profile) ? goal.creator_profile[0] : goal.creator_profile,
           participants: transformedParticipants,
-          budget_id: budgetId // Set the budget_id from the parameter
+          budget_id: budgetId, // Set the budget_id from the parameter
+          current_amount: currentAmount,
+          progress_percentage: progressPercentage
         };
-      })
-      .filter(goal => goal !== null) // Remove null entries
-      .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()); // Sort by created_at desc
 
-    return transformedData;
+        return transformedGoal;
+      })
+    );
+
+    // Sort by created_at desc
+    return goalsWithProgress.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
   }
 
   async findById(goalId: string, userId: string, authToken: string): Promise<SharedGoalResponse> {
@@ -713,6 +741,16 @@ export class SharedGoalsService {
       console.log("ERROR updating participant:", updateError);
       throw new Error(updateError.message);
     }
+  }
+
+  // ===== PROGRESS CALCULATION METHODS =====
+
+  async getGoalProgress(goalId: string, userId: string, authToken: string): Promise<GoalProgressResponse> {
+    return this.progressCalculationService.calculateGoalProgress(goalId, userId, authToken);
+  }
+
+  async getGoalWithProgress(goalId: string, userId: string, authToken: string): Promise<SharedGoalResponse> {
+    return this.progressCalculationService.getGoalWithProgress(goalId, userId, authToken);
   }
 
   private async addCreatorAsParticipant(goalId: string, userProfileId: string, userId: string, authToken: string): Promise<void> {
