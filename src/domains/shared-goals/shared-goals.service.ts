@@ -46,7 +46,7 @@ export class SharedGoalsService {
       .from('shared_goals')
       .insert([payload])
       .select(`
-        id, name, description, target_amount, target_date, created_by, status, is_private, created_at, updated_at,
+        id, name, description, target_amount, target_date, created_by, status, created_at, updated_at,
         creator_profile:user_profiles!shared_goals_created_by_fkey(username, display_name)
       `)
       .single();
@@ -89,7 +89,7 @@ export class SharedGoalsService {
     const { data: createdGoals, error: createdError } = await supabase
       .from('shared_goals')
       .select(`
-        id, name, description, target_amount, target_date, created_by, status, is_private, created_at, updated_at,
+        id, name, description, target_amount, target_date, created_by, status, created_at, updated_at,
         creator_profile:user_profiles!shared_goals_created_by_fkey(username, display_name),
         participants:goal_participants(
           id, goal_id, user_profile_id, monthly_contribution, category_id, budget_id, status, joined_at,
@@ -107,7 +107,7 @@ export class SharedGoalsService {
     const { data: participantGoals, error: participantError } = await supabase
       .from('shared_goals')
       .select(`
-        id, name, description, target_amount, target_date, created_by, status, is_private, created_at, updated_at,
+        id, name, description, target_amount, target_date, created_by, status, created_at, updated_at,
         creator_profile:user_profiles!shared_goals_created_by_fkey(username, display_name),
         participants:goal_participants!inner(
           id, goal_id, user_profile_id, monthly_contribution, category_id, budget_id, status, joined_at,
@@ -177,7 +177,7 @@ export class SharedGoalsService {
     const { data, error } = await supabase
       .from('shared_goals')
       .select(`
-        id, name, description, target_amount, target_date, created_by, status, is_private, created_at, updated_at,
+        id, name, description, target_amount, target_date, created_by, status, created_at, updated_at,
         creator_profile:user_profiles!shared_goals_created_by_fkey(username, display_name),
         participants:goal_participants(
           id, goal_id, user_profile_id, monthly_contribution, category_id, budget_id, status, joined_at,
@@ -250,7 +250,7 @@ export class SharedGoalsService {
       .update(updateSharedGoalDto)
       .eq('id', goalId)
       .select(`
-        id, name, description, target_amount, target_date, created_by, status, is_private, created_at, updated_at,
+        id, name, description, target_amount, target_date, created_by, status, created_at, updated_at,
         creator_profile:user_profiles!shared_goals_created_by_fkey(username, display_name)
       `)
       .single();

@@ -60,10 +60,6 @@ export class CreateSharedGoalDto {
   @IsDateString()
   @IsOptional()
   target_date?: string;
-
-  @IsBoolean()
-  @IsOptional()
-  is_private?: boolean = false;
 }
 
 export class UpdateSharedGoalDto {
@@ -90,10 +86,6 @@ export class UpdateSharedGoalDto {
   @IsEnum(GoalStatus)
   @IsOptional()
   status?: GoalStatus;
-
-  @IsBoolean()
-  @IsOptional()
-  is_private?: boolean;
 }
 
 export class SharedGoalResponse {
@@ -105,7 +97,6 @@ export class SharedGoalResponse {
   created_by: string;
   budget_id?: string; // Optional since it's derived from participants
   status: GoalStatus;
-  is_private: boolean;
   created_at: Date;
   updated_at: Date;
   creator_profile?: {
