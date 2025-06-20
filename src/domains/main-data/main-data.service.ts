@@ -31,7 +31,7 @@ export class MainDataService {
         // First, check if we need to roll over to current month
         await this.checkAndHandleMonthRollover(budgetId, userId, authToken, userDateContext);
 
-        const [budget, accounts, categoryGroups, categories, categoryBalances, transactions, readyToAssign, autoAssignConfigurations, userProfile, sharedGoals] = await Promise.all([
+        const [budget, accounts, categoryGroups, categories, categoryBalances, transactions, readyToAssign, autoAssignConfigurations, userProfile, sharedGoals, invitations] = await Promise.all([
             this.budgetsService.findOne(budgetId, userId, authToken),
             this.accountsService.findAll(userId, authToken, budgetId),
             this.categoryGroupsService.findAll(budgetId, userId, authToken),
@@ -41,7 +41,8 @@ export class MainDataService {
             this.readyToAssignService.calculateReadyToAssign(budgetId, userId, authToken),
             this.autoAssignService.findAllByBudget(budgetId, userId, authToken),
             this.userProfilesService.findByUserId(userId, authToken),
-            this.sharedGoalsService.findByUserId(userId, budgetId, authToken)
+            this.sharedGoalsService.findByUserId(userId, budgetId, authToken),
+            this.sharedGoalsService.getInvitations(userId, authToken)
         ]);
 
 
@@ -55,7 +56,8 @@ export class MainDataService {
            readyToAssign,
            autoAssignConfigurations,
            userProfile: userProfile || undefined,
-           sharedGoals
+           sharedGoals,
+           invitations
         }
     }
 

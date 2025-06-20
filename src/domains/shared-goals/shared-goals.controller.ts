@@ -12,10 +12,14 @@ import {
   ParseUUIDPipe
 } from '@nestjs/common';
 import { SharedGoalsService } from './shared-goals.service';
-import { 
-  CreateSharedGoalDto, 
-  UpdateSharedGoalDto, 
-  SharedGoalResponse 
+import {
+  CreateSharedGoalDto,
+  UpdateSharedGoalDto,
+  SharedGoalResponse,
+  CreateInvitationDto,
+  InvitationResponse,
+  GoalParticipantResponse,
+  UpdateParticipantDto
 } from './dto/shared-goal.dto';
 import { SupabaseAuthGuard } from '../../guards/auth.guard';
 import { AuthService } from '../../configurations/auth/auth.service';
@@ -60,5 +64,71 @@ export class SharedGoalsController {
   async remove(@Param('id', new ParseUUIDPipe()) id: string, @Req() req: any): Promise<void> {
     const authToken = this.authService.getAuthToken(req);
     return this.sharedGoalsService.delete(id, req.user.id, authToken);
+  }
+
+  // ===== INVITATION ENDPOINTS =====
+
+  @Post(':id/invite')
+  async inviteUser(
+    @Param('id', new ParseUUIDPipe()) goalId: string,
+    @Body() createInvitationDto: CreateInvitationDto,
+    @Req() req: any
+  ): Promise<InvitationResponse> {
+    const authToken = this.authService.getAuthToken(req);
+    return this.sharedGoalsService.inviteUser(goalId, createInvitationDto, req.user.id, authToken);
+  }
+
+  @Get('invitations')
+  async getInvitations(@Req() req: any): Promise<InvitationResponse[]> {
+    const authToken = this.authService.getAuthToken(req);
+    return this.sharedGoalsService.getInvitations(req.user.id, authToken);
+  }
+
+  @Post('invitations/:invitationId/accept')
+  async acceptInvitation(
+    @Param('invitationId', new ParseUUIDPipe()) invitationId: string,
+    @Req() req: any
+  ): Promise<void> {
+    const authToken = this.authService.getAuthToken(req);
+    return this.sharedGoalsService.acceptInvitation(invitationId, req.user.id, authToken);
+  }
+
+  @Post('invitations/:invitationId/decline')
+  async declineInvitation(
+    @Param('invitationId', new ParseUUIDPipe()) invitationId: string,
+    @Req() req: any
+  ): Promise<void> {
+    const authToken = this.authService.getAuthToken(req);
+    return this.sharedGoalsService.declineInvitation(invitationId, req.user.id, authToken);
+  }
+
+  // ===== PARTICIPANT ENDPOINTS =====
+
+  @Get(':id/participants')
+  async getParticipants(
+    @Param('id', new ParseUUIDPipe()) goalId: string,
+    @Req() req: any
+  ): Promise<GoalParticipantResponse[]> {
+    const authToken = this.authService.getAuthToken(req);
+    return this.sharedGoalsService.getGoalParticipants(goalId, req.user.id, authToken);
+  }
+
+  @Post(':id/leave')
+  async leaveGoal(
+    @Param('id', new ParseUUIDPipe()) goalId: string,
+    @Req() req: any
+  ): Promise<void> {
+    const authToken = this.authService.getAuthToken(req);
+    return this.sharedGoalsService.leaveGoal(goalId, req.user.id, authToken);
+  }
+
+  @Put(':id/participant')
+  async updateParticipant(
+    @Param('id', new ParseUUIDPipe()) goalId: string,
+    @Body() updateParticipantDto: UpdateParticipantDto,
+    @Req() req: any
+  ): Promise<void> {
+    const authToken = this.authService.getAuthToken(req);
+    return this.sharedGoalsService.updateParticipant(goalId, updateParticipantDto, req.user.id, authToken);
   }
 }
