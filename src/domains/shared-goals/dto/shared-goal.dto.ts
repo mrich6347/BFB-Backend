@@ -6,7 +6,6 @@ import {
   IsNumber, 
   IsDateString, 
   IsEnum, 
-  IsBoolean,
   Min,
   Max,
   MaxLength 
