@@ -10,7 +10,6 @@ import {
   UpdateParticipantDto,
   GoalProgressResponse,
   GoalStatus,
-  ParticipantStatus,
   InvitationStatus
 } from './dto/shared-goal.dto';
 import { SupabaseService } from '../../supabase/supabase.service';
@@ -97,7 +96,7 @@ export class SharedGoalsService {
         id, name, description, target_amount, target_date, created_by, status, created_at, updated_at,
         creator_profile:user_profiles!shared_goals_created_by_fkey(username, display_name),
         participants:goal_participants(
-          id, goal_id, user_profile_id, monthly_contribution, category_id, budget_id, status, joined_at,
+          id, goal_id, user_profile_id, monthly_contribution, category_id, budget_id, joined_at,
           user_profile:user_profiles(username, display_name)
         )
       `)
@@ -114,7 +113,6 @@ export class SharedGoalsService {
       .from('goal_participants')
       .select('goal_id')
       .eq('user_profile_id', userProfile.id)
-      .eq('status', ParticipantStatus.ACTIVE)
       .eq('budget_id', budgetId);
 
     if (participationError) {
@@ -132,7 +130,7 @@ export class SharedGoalsService {
             id, name, description, target_amount, target_date, created_by, status, created_at, updated_at,
             creator_profile:user_profiles!shared_goals_created_by_fkey(username, display_name),
             participants:goal_participants(
-              id, goal_id, user_profile_id, monthly_contribution, category_id, budget_id, status, joined_at,
+              id, goal_id, user_profile_id, monthly_contribution, category_id, budget_id, joined_at,
               user_profile:user_profiles(username, display_name)
             )
           `)
@@ -157,23 +155,20 @@ export class SharedGoalsService {
         return true;
       }
 
-      // Check if user is an active participant for the specific budget
+      // Check if user is a participant for the specific budget
       const userParticipant = goal.participants?.find(p =>
         p.user_profile_id === userProfile.id &&
-        p.budget_id === budgetId &&
-        p.status === ParticipantStatus.ACTIVE
+        p.budget_id === budgetId
       );
       return !!userParticipant;
     });
 
     const goalsWithProgress = await Promise.all(
       validGoals.map(async goal => {
-        // Show all active participants, not just those for the specific budget
-        const allActiveParticipants = goal.participants?.filter(p =>
-          p.status === ParticipantStatus.ACTIVE
-        ) || [];
+        // Show all participants
+        const allParticipants = goal.participants || [];
 
-        const transformedParticipants = allActiveParticipants.map(participant => ({
+        const transformedParticipants = allParticipants.map(participant => ({
           ...participant,
           user_profile: Array.isArray(participant.user_profile) ? participant.user_profile[0] : participant.user_profile
         }));
@@ -214,7 +209,7 @@ export class SharedGoalsService {
         id, name, description, target_amount, target_date, created_by, status, created_at, updated_at,
         creator_profile:user_profiles!shared_goals_created_by_fkey(username, display_name),
         participants:goal_participants(
-          id, goal_id, user_profile_id, monthly_contribution, category_id, budget_id, status, joined_at,
+          id, goal_id, user_profile_id, monthly_contribution, category_id, budget_id, joined_at,
           user_profile:user_profiles(username, display_name)
         )
       `)
@@ -231,7 +226,7 @@ export class SharedGoalsService {
 
     // Check if user has access to this goal
     const hasAccess = data.created_by === userProfile.id ||
-      data.participants?.some(p => p.user_profile_id === userProfile.id && p.status === ParticipantStatus.ACTIVE);
+      data.participants?.some(p => p.user_profile_id === userProfile.id);
 
     if (!hasAccess) {
       throw new ForbiddenException('You do not have access to this goal');
@@ -546,7 +541,6 @@ export class SharedGoalsService {
         goal_id: invitation.goal_id,
         user_profile_id: userProfile.id,
         budget_id: budget.id,
-        status: ParticipantStatus.ACTIVE,
         joined_at: new Date().toISOString(),
       }]);
 
@@ -622,15 +616,14 @@ export class SharedGoalsService {
     // Verify user has access to this goal
     await this.findById(goalId, userId, authToken);
 
-    // Get all active participants for the goal
+    // Get all participants for the goal
     const { data: participants, error } = await supabase
       .from('goal_participants')
       .select(`
-        id, goal_id, user_profile_id, monthly_contribution, category_id, budget_id, status, joined_at,
+        id, goal_id, user_profile_id, monthly_contribution, category_id, budget_id, joined_at,
         user_profile:user_profiles(username, display_name)
       `)
       .eq('goal_id', goalId)
-      .eq('status', ParticipantStatus.ACTIVE)
       .order('joined_at', { ascending: true });
 
     if (error) {
@@ -675,22 +668,21 @@ export class SharedGoalsService {
       .select('id')
       .eq('goal_id', goalId)
       .eq('user_profile_id', userProfile.id)
-      .eq('status', ParticipantStatus.ACTIVE)
       .single();
 
     if (participantError || !participant) {
-      throw new NotFoundException('You are not an active participant in this goal');
+      throw new NotFoundException('You are not a participant in this goal');
     }
 
-    // Update participant status to INACTIVE
-    const { error: updateError } = await supabase
+    // Delete the participant record (hard delete)
+    const { error: deleteError } = await supabase
       .from('goal_participants')
-      .update({ status: ParticipantStatus.INACTIVE })
+      .delete()
       .eq('id', participant.id);
 
-    if (updateError) {
-      console.log("ERROR leaving goal:", updateError);
-      throw new Error(updateError.message);
+    if (deleteError) {
+      console.log("ERROR leaving goal:", deleteError);
+      throw new Error(deleteError.message);
     }
   }
 
@@ -717,11 +709,10 @@ export class SharedGoalsService {
       .select('id, budget_id')
       .eq('goal_id', goalId)
       .eq('user_profile_id', userProfile.id)
-      .eq('status', ParticipantStatus.ACTIVE)
       .single();
 
     if (participantError || !participant) {
-      throw new NotFoundException('You are not an active participant in this goal');
+      throw new NotFoundException('You are not a participant in this goal');
     }
 
     // If category_id is provided, verify it belongs to the user's budget
@@ -778,11 +769,10 @@ export class SharedGoalsService {
       .select('id, user_profile_id, user_profile:user_profiles(username, display_name)')
       .eq('id', participantId)
       .eq('goal_id', goalId)
-      .eq('status', ParticipantStatus.ACTIVE)
       .single();
 
     if (participantError || !participant) {
-      throw new NotFoundException('Participant not found or not active in this goal');
+      throw new NotFoundException('Participant not found in this goal');
     }
 
     // Prevent creator from removing themselves (they should delete the goal instead)
@@ -790,15 +780,15 @@ export class SharedGoalsService {
       throw new ForbiddenException('Goal creator cannot remove themselves. Delete the goal instead.');
     }
 
-    // Update participant status to INACTIVE (soft delete)
-    const { error: updateError } = await supabase
+    // Delete the participant record (hard delete)
+    const { error: deleteError } = await supabase
       .from('goal_participants')
-      .update({ status: ParticipantStatus.INACTIVE })
+      .delete()
       .eq('id', participantId);
 
-    if (updateError) {
-      console.log("ERROR removing participant:", updateError);
-      throw new Error(updateError.message);
+    if (deleteError) {
+      console.log("ERROR removing participant:", deleteError);
+      throw new Error(deleteError.message);
     }
   }
 
@@ -831,7 +821,6 @@ export class SharedGoalsService {
       goal_id: goalId,
       user_profile_id: userProfileId,
       budget_id: budget.id,
-      status: ParticipantStatus.ACTIVE,
       joined_at: new Date().toISOString(),
     };
 
