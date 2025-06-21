@@ -173,6 +173,9 @@ export class DatabaseManagementService {
 
     // Create auto-assign configurations
     await this.createSampleAutoAssignConfigurations(supabase, userId, budget.id, categories);
+
+    // Create user profile and shared goals data
+    await this.createSharedGoalsData(supabase, userId, budget.id, categories);
   }
 
   private async createSampleBudget(supabase: SupabaseClient, userId: string): Promise<any> {
@@ -758,5 +761,272 @@ export class DatabaseManagementService {
         }
       }
     }
+  }
+
+  private async createSharedGoalsData(supabase: SupabaseClient, userId: string, budgetId: string, categories: any[]): Promise<void> {
+    // First, ensure the current user has a profile
+    const currentUserProfile = await this.ensureUserProfile(supabase, userId);
+
+    // Create shared goals (6 active, 4 completed) - all owned by current user
+    const sharedGoals = await this.createSampleSharedGoals(supabase, currentUserProfile.id);
+
+    // Add the current user as participant to all goals
+    await this.createGoalParticipants(supabase, sharedGoals, currentUserProfile, budgetId, categories);
+
+    // Create category balances for completed goals to ensure they show as completed
+    await this.createCompletedGoalBalances(supabase, sharedGoals, budgetId);
+  }
+
+  private async ensureUserProfile(supabase: SupabaseClient, userId: string): Promise<any> {
+    // Check if user already has a profile
+    const { data: existingProfile } = await supabase
+      .from('user_profiles')
+      .select('*')
+      .eq('user_id', userId)
+      .single();
+
+    if (existingProfile) {
+      return existingProfile;
+    }
+
+    // Create a profile for the current user
+    const profilePayload = {
+      id: uuidv4(),
+      user_id: userId,
+      username: 'demo_user',
+      display_name: 'Demo User'
+    };
+
+    const { data, error } = await supabase
+      .from('user_profiles')
+      .insert([profilePayload])
+      .select('*')
+      .single();
+
+    if (error) {
+      throw new Error(`Failed to create user profile: ${error.message}`);
+    }
+
+    return data;
+  }
+
+
+
+  private async createSampleSharedGoals(supabase: SupabaseClient, creatorProfileId: string): Promise<any[]> {
+    const currentDate = new Date();
+    const futureDate = new Date();
+    futureDate.setMonth(currentDate.getMonth() + 12);
+
+    const pastDate = new Date();
+    pastDate.setMonth(currentDate.getMonth() - 2);
+
+    const goalsData = [
+      // Active Goals (6)
+      {
+        id: uuidv4(),
+        name: 'Family Vacation to Europe',
+        description: 'Saving for a 2-week family trip to Europe including flights, hotels, and activities',
+        target_amount: 8500.00,
+        target_date: futureDate.toISOString().split('T')[0],
+        created_by: creatorProfileId,
+        status: 'ACTIVE'
+      },
+      {
+        id: uuidv4(),
+        name: 'Emergency Fund',
+        description: 'Building a 6-month emergency fund for financial security',
+        target_amount: 15000.00,
+        target_date: null,
+        created_by: creatorProfileId,
+        status: 'ACTIVE'
+      },
+      {
+        id: uuidv4(),
+        name: 'New Car Down Payment',
+        description: 'Saving for a down payment on a reliable family car',
+        target_amount: 5000.00,
+        target_date: new Date(currentDate.getFullYear(), currentDate.getMonth() + 8, 1).toISOString().split('T')[0],
+        created_by: creatorProfileId,
+        status: 'ACTIVE'
+      },
+      {
+        id: uuidv4(),
+        name: 'Home Renovation',
+        description: 'Kitchen and bathroom renovation project',
+        target_amount: 25000.00,
+        target_date: new Date(currentDate.getFullYear() + 1, currentDate.getMonth() + 6, 1).toISOString().split('T')[0],
+        created_by: creatorProfileId,
+        status: 'ACTIVE'
+      },
+      {
+        id: uuidv4(),
+        name: 'Kids College Fund',
+        description: 'Long-term savings for children\'s education expenses',
+        target_amount: 50000.00,
+        target_date: null,
+        created_by: creatorProfileId,
+        status: 'ACTIVE'
+      },
+      {
+        id: uuidv4(),
+        name: 'Wedding Expenses',
+        description: 'Saving for wedding venue, catering, and other expenses',
+        target_amount: 12000.00,
+        target_date: new Date(currentDate.getFullYear() + 1, currentDate.getMonth() + 3, 15).toISOString().split('T')[0],
+        created_by: creatorProfileId,
+        status: 'ACTIVE'
+      },
+      // Completed Goals (3)
+      {
+        id: uuidv4(),
+        name: 'New Laptop Fund',
+        description: 'Saved for a high-performance laptop for work',
+        target_amount: 2500.00,
+        target_date: pastDate.toISOString().split('T')[0],
+        created_by: creatorProfileId,
+        status: 'COMPLETED'
+      },
+      {
+        id: uuidv4(),
+        name: 'Holiday Gifts',
+        description: 'Christmas and birthday gifts for family and friends',
+        target_amount: 1200.00,
+        target_date: new Date(currentDate.getFullYear() - 1, 11, 1).toISOString().split('T')[0],
+        created_by: creatorProfileId,
+        status: 'COMPLETED'
+      },
+      {
+        id: uuidv4(),
+        name: 'Furniture for New Apartment',
+        description: 'Essential furniture for moving to a new place',
+        target_amount: 3500.00,
+        target_date: new Date(currentDate.getFullYear() - 1, currentDate.getMonth() - 6, 1).toISOString().split('T')[0],
+        created_by: creatorProfileId,
+        status: 'COMPLETED'
+      }
+    ];
+
+    const { data, error } = await supabase
+      .from('shared_goals')
+      .insert(goalsData)
+      .select('*');
+
+    if (error) {
+      throw new Error(`Failed to create sample shared goals: ${error.message}`);
+    }
+
+    return data;
+  }
+
+  private async createGoalParticipants(
+    supabase: SupabaseClient,
+    sharedGoals: any[],
+    currentUserProfile: any,
+    budgetId: string,
+    categories: any[]
+  ): Promise<void> {
+    const participantsData: any[] = [];
+    const savingsCategories = categories.filter(c => c.name.toLowerCase().includes('savings') ||
+                                                     c.name.toLowerCase().includes('emergency') ||
+                                                     c.name.toLowerCase().includes('vacation'));
+
+    // For each goal, add the current user as the only participant
+    for (const goal of sharedGoals) {
+      participantsData.push({
+        id: uuidv4(),
+        goal_id: goal.id,
+        user_profile_id: currentUserProfile.id,
+        monthly_contribution: this.getRandomContribution(goal.target_amount),
+        category_id: savingsCategories.length > 0 ? savingsCategories[Math.floor(Math.random() * savingsCategories.length)].id : null,
+        budget_id: budgetId,
+        joined_at: goal.created_at
+      });
+    }
+
+    const { error } = await supabase
+      .from('goal_participants')
+      .insert(participantsData);
+
+    if (error) {
+      throw new Error(`Failed to create goal participants: ${error.message}`);
+    }
+  }
+
+
+
+  private async createCompletedGoalBalances(supabase: SupabaseClient, sharedGoals: any[], budgetId: string): Promise<void> {
+    const currentDate = new Date();
+    const currentYear = currentDate.getFullYear();
+    const currentMonth = currentDate.getMonth() + 1;
+
+    // Find completed goals and their participants
+    const completedGoals = sharedGoals.filter(goal => goal.status === 'COMPLETED');
+
+    for (const goal of completedGoals) {
+      // Get the participant for this goal
+      const { data: participants, error: participantError } = await supabase
+        .from('goal_participants')
+        .select('category_id')
+        .eq('goal_id', goal.id);
+
+      if (participantError || !participants || participants.length === 0) {
+        continue;
+      }
+
+      const participant = participants[0];
+      if (!participant.category_id) {
+        continue;
+      }
+
+      // Check if category balance already exists for current month
+      const { data: existingBalance } = await supabase
+        .from('category_balances')
+        .select('id')
+        .eq('category_id', participant.category_id)
+        .eq('budget_id', budgetId)
+        .eq('year', currentYear)
+        .eq('month', currentMonth)
+        .single();
+
+      if (existingBalance) {
+        // Update existing balance to have enough for the goal
+        await supabase
+          .from('category_balances')
+          .update({
+            available: goal.target_amount,
+            assigned: goal.target_amount
+          })
+          .eq('id', existingBalance.id);
+      } else {
+        // Create new balance with enough for the goal
+        await supabase
+          .from('category_balances')
+          .insert([{
+            id: uuidv4(),
+            category_id: participant.category_id,
+            budget_id: budgetId,
+            year: currentYear,
+            month: currentMonth,
+            assigned: goal.target_amount,
+            activity: 0,
+            available: goal.target_amount
+          }]);
+      }
+    }
+  }
+
+  private getRandomContribution(targetAmount: number): number {
+    // Calculate a reasonable monthly contribution based on target amount
+    // Aim for contributions that would reach the goal in 6-24 months
+    const minMonths = 6;
+    const maxMonths = 24;
+    const minContribution = targetAmount / maxMonths;
+    const maxContribution = targetAmount / minMonths;
+
+    // Add some randomness
+    const contribution = minContribution + Math.random() * (maxContribution - minContribution);
+
+    // Round to nearest $10
+    return Math.round(contribution / 10) * 10;
   }
 }
