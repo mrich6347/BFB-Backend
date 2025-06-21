@@ -73,3 +73,4 @@ export class AutoAssignController {
     return this.autoAssignService.apply(applyDto, req.user.id, authToken, applyDto);
   }
 }
+
