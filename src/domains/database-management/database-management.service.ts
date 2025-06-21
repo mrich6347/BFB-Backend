@@ -37,27 +37,122 @@ export class DatabaseManagementService {
       'transactions',           // Must be first - references accounts and categories
       'category_balances',      // References categories
       'auto_assign_configurations', // References categories and budgets
+      'goal_participants',      // References shared_goals, user_profiles, categories, and budgets
+      'goal_invitations',       // References shared_goals and user_profiles
       'categories',             // References category_groups and budgets
       'category_groups',        // References budgets
       'accounts',               // References budgets
-      'budgets'                 // Parent table - delete last
+      'shared_goals',           // References user_profiles
+      'budgets',                // References user_profiles
+      'user_profiles'           // Parent table - delete last
     ];
   }
 
   private async clearTableForUser(supabase: SupabaseClient, table: string, userId: string): Promise<void> {
     try {
-      const { error } = await supabase
-        .from(table)
-        .delete()
-        .eq('user_id', userId);
+      // Handle tables with different column structures
+      switch (table) {
+        case 'goal_participants':
+          await this.clearGoalParticipants(supabase, userId);
+          break;
 
-      if (error) {
-        console.error(`Error clearing table ${table}:`, error);
-        throw new Error(`Failed to clear table ${table}: ${error.message}`);
+        case 'goal_invitations':
+          await this.clearGoalInvitations(supabase, userId);
+          break;
+
+        case 'shared_goals':
+          await this.clearSharedGoals(supabase, userId);
+          break;
+
+        default:
+          // Standard case for tables with user_id column
+          const { error } = await supabase
+            .from(table)
+            .delete()
+            .eq('user_id', userId);
+
+          if (error) {
+            console.error(`Error clearing table ${table}:`, error);
+            throw new Error(`Failed to clear table ${table}: ${error.message}`);
+          }
+          break;
       }
     } catch (error) {
       console.error(`Error clearing table ${table}:`, error);
       throw new Error(`Failed to clear table ${table}: ${error.message}`);
+    }
+  }
+
+  private async clearGoalParticipants(supabase: SupabaseClient, userId: string): Promise<void> {
+    // First get the user's profile ID
+    const { data: userProfile, error: profileError } = await supabase
+      .from('user_profiles')
+      .select('id')
+      .eq('user_id', userId)
+      .single();
+
+    if (profileError && profileError.code !== 'PGRST116') { // PGRST116 = no rows returned
+      throw new Error(`Failed to get user profile: ${profileError.message}`);
+    }
+
+    if (userProfile) {
+      const { error } = await supabase
+        .from('goal_participants')
+        .delete()
+        .eq('user_profile_id', userProfile.id);
+
+      if (error) {
+        throw new Error(`Failed to clear goal_participants: ${error.message}`);
+      }
+    }
+  }
+
+  private async clearGoalInvitations(supabase: SupabaseClient, userId: string): Promise<void> {
+    // First get the user's profile ID
+    const { data: userProfile, error: profileError } = await supabase
+      .from('user_profiles')
+      .select('id')
+      .eq('user_id', userId)
+      .single();
+
+    if (profileError && profileError.code !== 'PGRST116') { // PGRST116 = no rows returned
+      throw new Error(`Failed to get user profile: ${profileError.message}`);
+    }
+
+    if (userProfile) {
+      // Clear invitations where user is either inviter or invitee
+      const { error } = await supabase
+        .from('goal_invitations')
+        .delete()
+        .or(`inviter_id.eq.${userProfile.id},invitee_id.eq.${userProfile.id}`);
+
+      if (error) {
+        throw new Error(`Failed to clear goal_invitations: ${error.message}`);
+      }
+    }
+  }
+
+  private async clearSharedGoals(supabase: SupabaseClient, userId: string): Promise<void> {
+    // First get the user's profile ID
+    const { data: userProfile, error: profileError } = await supabase
+      .from('user_profiles')
+      .select('id')
+      .eq('user_id', userId)
+      .single();
+
+    if (profileError && profileError.code !== 'PGRST116') { // PGRST116 = no rows returned
+      throw new Error(`Failed to get user profile: ${profileError.message}`);
+    }
+
+    if (userProfile) {
+      const { error } = await supabase
+        .from('shared_goals')
+        .delete()
+        .eq('created_by', userProfile.id);
+
+      if (error) {
+        throw new Error(`Failed to clear shared_goals: ${error.message}`);
+      }
     }
   }
 
