@@ -3,7 +3,8 @@ import { Transform } from 'class-transformer';
 
 export enum AccountType {
     CASH = 'CASH',
-    TRACKING = 'TRACKING'
+    TRACKING = 'TRACKING',
+    CREDIT = 'CREDIT'
 }
 
 export class CreateAccountDto {

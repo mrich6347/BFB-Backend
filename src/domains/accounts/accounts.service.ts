@@ -397,18 +397,18 @@ export class AccountsService {
     // Get the source account to determine its type and budget
     const sourceAccount = await this.findOne(accountId, userId, authToken);
 
-    // Only allow transfers from CASH accounts to TRACKING accounts
+    // Only allow transfers from CASH accounts to TRACKING or CREDIT accounts
     if (sourceAccount.account_type !== 'CASH') {
       throw new Error('Transfers are only supported from CASH accounts');
     }
 
-    // Get all TRACKING accounts in the same budget
+    // Get all TRACKING and CREDIT accounts in the same budget
     const { data, error } = await supabase
       .from('accounts')
       .select('id, name, account_type, budget_id, account_balance, cleared_balance, uncleared_balance, working_balance, is_active')
       .eq('user_id', userId)
       .eq('budget_id', sourceAccount.budget_id)
-      .eq('account_type', 'TRACKING')
+      .in('account_type', ['TRACKING', 'CREDIT'])
       .eq('is_active', true)
       .order('name');
 
