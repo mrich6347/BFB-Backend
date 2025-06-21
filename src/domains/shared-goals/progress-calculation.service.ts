@@ -81,13 +81,19 @@ export class ProgressCalculationService {
       participantsWithProgress
     );
 
-    // Check if goal should be marked as completed
+    // Check if goal status should be updated based on progress
     const shouldMarkCompleted = totalCurrentAmount >= goal.target_amount && goal.status !== 'COMPLETED';
+    const shouldMarkActive = totalCurrentAmount < goal.target_amount && goal.status === 'COMPLETED';
 
-    // Update goal status if completed
+    // Update goal status if it should be completed
     if (shouldMarkCompleted) {
       await this.updateGoalStatus(goal.id, 'COMPLETED', authToken);
       goal.status = 'COMPLETED';
+    }
+    // Update goal status back to active if progress dropped below 100%
+    else if (shouldMarkActive) {
+      await this.updateGoalStatus(goal.id, 'ACTIVE', authToken);
+      goal.status = 'ACTIVE';
     }
 
     // Transform goal data
