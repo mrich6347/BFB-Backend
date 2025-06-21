@@ -1,6 +1,0 @@
----
-description: 
-globs: 
-alwaysApply: true
----
-- Whenever I ask you to fill in an entity with a provided DB Schema I give you, don't use nest js decorators. The DB table is alrady made at that time.
