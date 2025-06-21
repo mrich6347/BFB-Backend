@@ -397,11 +397,6 @@ export class AccountsService {
     // Get the source account to determine its type and budget
     const sourceAccount = await this.findOne(accountId, userId, authToken);
 
-    // Only allow transfers from CASH accounts to TRACKING or CREDIT accounts
-    if (sourceAccount.account_type !== 'CASH') {
-      throw new Error('Transfers are only supported from CASH accounts');
-    }
-
     // Get all TRACKING and CREDIT accounts in the same budget
     const { data, error } = await supabase
       .from('accounts')
