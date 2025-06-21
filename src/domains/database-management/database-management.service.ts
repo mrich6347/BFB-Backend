@@ -767,7 +767,7 @@ export class DatabaseManagementService {
     // First, ensure the current user has a profile
     const currentUserProfile = await this.ensureUserProfile(supabase, userId);
 
-    // Create shared goals (6 active, 4 completed) - all owned by current user
+    // Create shared goals (3 active, 3 completed) - all owned by current user
     const sharedGoals = await this.createSampleSharedGoals(supabase, currentUserProfile.id);
 
     // Add the current user as participant to all goals
@@ -821,7 +821,7 @@ export class DatabaseManagementService {
     pastDate.setMonth(currentDate.getMonth() - 2);
 
     const goalsData = [
-      // Active Goals (6)
+      // Active Goals (3)
       {
         id: uuidv4(),
         name: 'Family Vacation to Europe',
@@ -849,33 +849,7 @@ export class DatabaseManagementService {
         created_by: creatorProfileId,
         status: 'ACTIVE'
       },
-      {
-        id: uuidv4(),
-        name: 'Home Renovation',
-        description: 'Kitchen and bathroom renovation project',
-        target_amount: 25000.00,
-        target_date: new Date(currentDate.getFullYear() + 1, currentDate.getMonth() + 6, 1).toISOString().split('T')[0],
-        created_by: creatorProfileId,
-        status: 'ACTIVE'
-      },
-      {
-        id: uuidv4(),
-        name: 'Kids College Fund',
-        description: 'Long-term savings for children\'s education expenses',
-        target_amount: 50000.00,
-        target_date: null,
-        created_by: creatorProfileId,
-        status: 'ACTIVE'
-      },
-      {
-        id: uuidv4(),
-        name: 'Wedding Expenses',
-        description: 'Saving for wedding venue, catering, and other expenses',
-        target_amount: 12000.00,
-        target_date: new Date(currentDate.getFullYear() + 1, currentDate.getMonth() + 3, 15).toISOString().split('T')[0],
-        created_by: creatorProfileId,
-        status: 'ACTIVE'
-      },
+
       // Completed Goals (3)
       {
         id: uuidv4(),
