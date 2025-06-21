@@ -60,3 +60,5 @@ bfb-backend_bfb_data
 
 # Local data volume for Docker Postgres
 data/
+
+.env
