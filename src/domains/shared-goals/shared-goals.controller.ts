@@ -134,6 +134,16 @@ export class SharedGoalsController {
     return this.sharedGoalsService.updateParticipant(goalId, updateParticipantDto, req.user.id, authToken);
   }
 
+  @Delete(':id/participant/:participantId')
+  async removeParticipant(
+    @Param('id', new ParseUUIDPipe()) goalId: string,
+    @Param('participantId', new ParseUUIDPipe()) participantId: string,
+    @Req() req: any
+  ): Promise<void> {
+    const authToken = this.authService.getAuthToken(req);
+    return this.sharedGoalsService.removeParticipant(goalId, participantId, req.user.id, authToken);
+  }
+
   // ===== PROGRESS ENDPOINTS =====
 
   @Get(':id/progress')

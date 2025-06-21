@@ -750,6 +750,58 @@ export class SharedGoalsService {
     }
   }
 
+  async removeParticipant(goalId: string, participantId: string, userId: string, authToken: string): Promise<void> {
+    const supabase = this.supabaseService.getAuthenticatedClient(authToken);
+
+    // Get user's profile
+    const { data: userProfile, error: profileError } = await supabase
+      .from('user_profiles')
+      .select('id')
+      .eq('user_id', userId)
+      .single();
+
+    if (profileError || !userProfile) {
+      throw new NotFoundException('User profile not found');
+    }
+
+    // Verify goal exists and get goal details
+    const goal = await this.findById(goalId, userId, authToken);
+
+    // Check if user is the creator (only creators can remove participants)
+    if (goal.created_by !== userProfile.id) {
+      throw new ForbiddenException('Only the goal creator can remove participants');
+    }
+
+    // Get the participant to be removed
+    const { data: participant, error: participantError } = await supabase
+      .from('goal_participants')
+      .select('id, user_profile_id, user_profile:user_profiles(username, display_name)')
+      .eq('id', participantId)
+      .eq('goal_id', goalId)
+      .eq('status', ParticipantStatus.ACTIVE)
+      .single();
+
+    if (participantError || !participant) {
+      throw new NotFoundException('Participant not found or not active in this goal');
+    }
+
+    // Prevent creator from removing themselves (they should delete the goal instead)
+    if (participant.user_profile_id === userProfile.id) {
+      throw new ForbiddenException('Goal creator cannot remove themselves. Delete the goal instead.');
+    }
+
+    // Update participant status to INACTIVE (soft delete)
+    const { error: updateError } = await supabase
+      .from('goal_participants')
+      .update({ status: ParticipantStatus.INACTIVE })
+      .eq('id', participantId);
+
+    if (updateError) {
+      console.log("ERROR removing participant:", updateError);
+      throw new Error(updateError.message);
+    }
+  }
+
   // ===== PROGRESS CALCULATION METHODS =====
 
   async getGoalProgress(goalId: string, userId: string, authToken: string): Promise<GoalProgressResponse> {
