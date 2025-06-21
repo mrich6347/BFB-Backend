@@ -31,14 +31,7 @@ export enum InvitationStatus {
   EXPIRED = 'EXPIRED'
 }
 
-export enum ActivityType {
-  CONTRIBUTION_UPDATED = 'CONTRIBUTION_UPDATED',
-  CATEGORY_CHANGED = 'CATEGORY_CHANGED',
-  GOAL_UPDATED = 'GOAL_UPDATED',
-  USER_JOINED = 'USER_JOINED',
-  USER_LEFT = 'USER_LEFT',
-  GOAL_COMPLETED = 'GOAL_COMPLETED'
-}
+
 
 export class CreateSharedGoalDto {
   @IsString()
@@ -125,6 +118,8 @@ export class GoalParticipantResponse {
     name: string;
     available_balance?: number;
   };
+  current_contribution?: number;
+  contribution_percentage?: number;
 }
 
 export class CreateInvitationDto {
@@ -165,23 +160,10 @@ export class UpdateParticipantDto {
   category_id?: string;
 }
 
-export class GoalActivityResponse {
-  id: string;
-  goal_id: string;
-  user_profile_id: string;
-  activity_type: ActivityType;
-  amount_change?: number;
-  description: string;
-  created_at: Date;
-  user_profile: {
-    username: string;
-    display_name: string;
-  };
-}
+
 
 export class ParticipantWithProgressResponse extends GoalParticipantResponse {
-  current_contribution: number;
-  contribution_percentage: number;
+  // Inherits current_contribution and contribution_percentage from base class
 }
 
 export class GoalProgressResponse {

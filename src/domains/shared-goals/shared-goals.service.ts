@@ -178,30 +178,12 @@ export class SharedGoalsService {
           user_profile: Array.isArray(participant.user_profile) ? participant.user_profile[0] : participant.user_profile
         }));
 
-        // Calculate progress for this goal
-        let currentAmount = 0;
-        for (const participant of transformedParticipants) {
-          if (participant.category_id) {
-            const contribution = await this.progressCalculationService.getParticipantContribution(
-              participant.category_id,
-              participant.budget_id,
-              authToken
-            );
-            currentAmount += contribution;
-          }
-        }
-
-        const progressPercentage = goal.target_amount > 0
-          ? Math.min((currentAmount / goal.target_amount) * 100, 100)
-          : 0;
+        // Use progress calculation service to get full progress data with contribution percentages
+        const progressData = await this.progressCalculationService.calculateGoalProgress(goal.id, userId, authToken);
 
         const transformedGoal: SharedGoalResponse = {
-          ...goal,
-          creator_profile: Array.isArray(goal.creator_profile) ? goal.creator_profile[0] : goal.creator_profile,
-          participants: transformedParticipants,
+          ...progressData.goal,
           budget_id: budgetId, // Set the budget_id from the parameter
-          current_amount: currentAmount,
-          progress_percentage: progressPercentage
         };
 
         return transformedGoal;

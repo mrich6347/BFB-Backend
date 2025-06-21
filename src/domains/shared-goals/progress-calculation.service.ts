@@ -31,6 +31,9 @@ export class ProgressCalculationService {
     const participantsWithProgress: ParticipantWithProgressResponse[] = [];
     let totalCurrentAmount = 0;
 
+    // First pass: collect all contributions to calculate total
+    const participantContributions: { participant: any; contribution: number }[] = [];
+
     if (goal.participants && goal.participants.length > 0) {
       for (const participant of goal.participants) {
         if (participant.status === 'ACTIVE' && participant.category_id) {
@@ -41,31 +44,28 @@ export class ProgressCalculationService {
             authToken
           );
 
-          const contributionPercentage = goal.target_amount > 0 
-            ? (contribution / goal.target_amount) * 100 
-            : 0;
-
-          participantsWithProgress.push({
-            ...participant,
-            user_profile: Array.isArray(participant.user_profile) 
-              ? participant.user_profile[0] 
-              : participant.user_profile,
-            current_contribution: contribution,
-            contribution_percentage: contributionPercentage,
-          });
-
+          participantContributions.push({ participant, contribution });
           totalCurrentAmount += contribution;
         } else {
           // Participant without category selection
-          participantsWithProgress.push({
-            ...participant,
-            user_profile: Array.isArray(participant.user_profile) 
-              ? participant.user_profile[0] 
-              : participant.user_profile,
-            current_contribution: 0,
-            contribution_percentage: 0,
-          });
+          participantContributions.push({ participant, contribution: 0 });
         }
+      }
+
+      // Second pass: calculate percentages based on total current amount
+      for (const { participant, contribution } of participantContributions) {
+        const contributionPercentage = totalCurrentAmount > 0
+          ? (contribution / totalCurrentAmount) * 100
+          : 0;
+
+        participantsWithProgress.push({
+          ...participant,
+          user_profile: Array.isArray(participant.user_profile)
+            ? participant.user_profile[0]
+            : participant.user_profile,
+          current_contribution: contribution,
+          contribution_percentage: contributionPercentage,
+        });
       }
     }
 
@@ -80,11 +80,20 @@ export class ProgressCalculationService {
       participantsWithProgress
     );
 
+    // Check if goal should be marked as completed
+    const shouldMarkCompleted = totalCurrentAmount >= goal.target_amount && goal.status !== 'COMPLETED';
+
+    // Update goal status if completed
+    if (shouldMarkCompleted) {
+      await this.updateGoalStatus(goal.id, 'COMPLETED', authToken);
+      goal.status = 'COMPLETED';
+    }
+
     // Transform goal data
     const transformedGoal: SharedGoalResponse = {
       ...goal,
-      creator_profile: Array.isArray(goal.creator_profile) 
-        ? goal.creator_profile[0] 
+      creator_profile: Array.isArray(goal.creator_profile)
+        ? goal.creator_profile[0]
         : goal.creator_profile,
       participants: participantsWithProgress,
       current_amount: totalCurrentAmount,
@@ -155,5 +164,19 @@ export class ProgressCalculationService {
   async getGoalWithProgress(goalId: string, userId: string, authToken: string): Promise<SharedGoalResponse> {
     const progressData = await this.calculateGoalProgress(goalId, userId, authToken);
     return progressData.goal;
+  }
+
+  private async updateGoalStatus(goalId: string, status: string, authToken: string): Promise<void> {
+    const supabase = this.supabaseService.getAuthenticatedClient(authToken);
+
+    const { error } = await supabase
+      .from('shared_goals')
+      .update({ status })
+      .eq('id', goalId);
+
+    if (error) {
+      console.error('Error updating goal status:', error);
+      // Don't throw error to avoid breaking progress calculation
+    }
   }
 }
