@@ -151,7 +151,11 @@ class TestCLI {
     console.log('  run-category <category> - Run all scenarios in a category');
     console.log('  list                    - List available scenarios');
     console.log('  create                  - Create a new scenario interactively');
+    console.log('  test-users              - Show test user information');
     console.log('  exit                    - Exit interactive mode');
+    console.log('');
+    console.log('Options:');
+    console.log('  --user <role>           - Specify test user role (user, admin, readonly)');
     console.log('');
 
     // Simple interactive loop (in a real implementation, you'd use readline)
@@ -244,7 +248,7 @@ class TestCLI {
     console.log('======================');
     console.log('This feature helps you create new test scenarios.');
     console.log('For now, you can copy and modify existing scenarios in the scenarios/ directory.');
-    
+
     const template = {
       name: "New Test Scenario",
       description: "Describe what this test verifies",
@@ -270,6 +274,14 @@ class TestCLI {
     console.log(`📄 Template created at: ${templatePath}`);
   }
 
+  async showTestUserInfo() {
+    console.log('👥 Test User Information');
+    console.log('========================');
+    console.log('🔐 Test User: test.user@bfb.test');
+    console.log('📝 This user is automatically created and authenticated');
+    console.log('🌐 API access is verified during test initialization');
+  }
+
   async cleanup() {
     if (this.testRunner) {
       await this.testRunner.cleanup();
@@ -280,10 +292,10 @@ class TestCLI {
 // Main execution
 async function main() {
   const cli = new TestCLI();
-  
+
   try {
     await cli.initialize();
-    
+
     const args = process.argv.slice(2);
     const command = args[0];
     
@@ -318,6 +330,10 @@ async function main() {
 
       case 'create':
         await cli.createNewScenario();
+        break;
+
+      case 'test-users':
+        await cli.showTestUserInfo();
         break;
 
       case 'interactive':

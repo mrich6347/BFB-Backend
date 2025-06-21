@@ -2,6 +2,11 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication } from '@nestjs/common';
 import request from 'supertest';
 import { AppModule } from '../app.module';
+import { createClient } from '@supabase/supabase-js';
+import * as dotenv from 'dotenv';
+
+// Load environment variables
+dotenv.config();
 
 // Simple test scenario structure
 export interface TestScenario {
@@ -46,6 +51,11 @@ export class YnabTestRunner {
   private testData: any = {};
 
   async initialize() {
+    console.log('🚀 Initializing Test Runner...');
+
+    // Auto-login with test user
+    await this.setupTestUser();
+
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [AppModule],
     }).compile();
@@ -53,8 +63,7 @@ export class YnabTestRunner {
     this.app = moduleFixture.createNestApplication();
     await this.app.init();
 
-    // Set up test user and auth (you'll need to implement this based on your auth system)
-    await this.setupTestUser();
+    console.log('✅ Ready to run tests\n');
   }
 
   async runScenario(scenario: TestScenario): Promise<TestResult> {
@@ -502,12 +511,41 @@ export class YnabTestRunner {
   }
 
   private async setupTestUser() {
-    // Using updated auth token provided by user - June 19, 2025
-    this.authToken = 'eyJhbGciOiJIUzI1NiIsImtpZCI6ImZOODlYcTM1akNFdlFBQloiLCJ0eXAiOiJKV1QifQ.eyJpc3MiOiJodHRwczovL2Z4enRveWJma2ltb3lub3hhenBiLnN1cGFiYXNlLmNvL2F1dGgvdjEiLCJzdWIiOiI0MDIzYTNlOC0yMGMzLTRjZGEtYTEyNS0yYjhhNWE4NGZhNzAiLCJhdWQiOiJhdXRoZW50aWNhdGVkIiwiZXhwIjoxNzUwMzQ5OTQyLCJpYXQiOjE3NTAzNDYzNDIsImVtYWlsIjoicmljaC5tYXR0aGV3akBnbWFpbC5jb20iLCJwaG9uZSI6IiIsImFwcF9tZXRhZGF0YSI6eyJwcm92aWRlciI6ImVtYWlsIiwicHJvdmlkZXJzIjpbImVtYWlsIl19LCJ1c2VyX21ldGFkYXRhIjp7ImVtYWlsIjoicmljaC5tYXR0aGV3akBnbWFpbC5jb20iLCJlbWFpbF92ZXJpZmllZCI6dHJ1ZSwicGhvbmVfdmVyaWZpZWQiOmZhbHNlLCJzdWIiOiI0MDIzYTNlOC0yMGMzLTRjZGEtYTEyNS0yYjhhNWE4NGZhNzAifSwicm9sZSI6ImF1dGhlbnRpY2F0ZWQiLCJhYWwiOiJhYWwxIiwiYW1yIjpbeyJtZXRob2QiOiJwYXNzd29yZCIsInRpbWVzdGFtcCI6MTc1MDAxNTIxOX1dLCJzZXNzaW9uX2lkIjoiNjM0MjQxYzItOWQ3OS00NjU3LTg2MzQtYzhjNWRlYzliOWE1IiwiaXNfYW5vbnltb3VzIjpmYWxzZX0.SK0XOPSZsSf4Uk4kbEukFlRgZDwmPY4a1RRNYdTLJDo';
-    this.userId = '4023a3e8-20c3-4cda-a125-2b8a5a84fa70'; // Extracted from JWT payload
+    console.log('🔐 Setting up test authentication...');
 
-    console.log('🔐 Using updated auth token');
-    console.log('👤 Using user ID:', this.userId);
+    const supabase = createClient(
+      process.env.SUPABASE_URL!,
+      process.env.SUPABASE_KEY!
+    );
+
+    const testEmail = 'test.user@bfb.test';
+    const testPassword = 'TestPassword123!';
+
+    try {
+      // Try to sign up the user (will fail if already exists, which is fine)
+      await supabase.auth.signUp({
+        email: testEmail,
+        password: testPassword,
+        options: { emailRedirectTo: undefined }
+      });
+    } catch (error) {
+      // User probably already exists, continue
+    }
+
+    // Sign in to get token
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email: testEmail,
+      password: testPassword
+    });
+
+    if (error || !data.session) {
+      throw new Error(`Failed to authenticate test user: ${error?.message}`);
+    }
+
+    this.authToken = data.session.access_token;
+    this.userId = data.user.id;
+
+    console.log(`✅ Test user authenticated: ${testEmail}`);
   }
 
   private async cleanDatabase(): Promise<void> {
@@ -521,7 +559,9 @@ export class YnabTestRunner {
   }
 
   async cleanup() {
-    await this.app.close();
+    if (this.app) {
+      await this.app.close();
+    }
   }
 }
 
