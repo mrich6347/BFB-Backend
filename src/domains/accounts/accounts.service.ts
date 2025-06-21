@@ -253,7 +253,7 @@ export class AccountsService {
     };
   }
 
-  async updateTrackingBalance(accountId: string, newBalance: number, memo: string, userId: string, authToken: string): Promise<AccountWithReadyToAssignResponse> {
+  async updateTrackingBalance(accountId: string, newBalance: number, memo: string, userId: string, authToken: string): Promise<ReconcileAccountResponse> {
     const supabase = this.supabaseService.getAuthenticatedClient(authToken);
 
     // Get the account and verify it's a tracking account
@@ -311,6 +311,7 @@ export class AccountsService {
 
     return {
       account: updatedAccount,
+      adjustmentTransaction,
       readyToAssign
     };
   }

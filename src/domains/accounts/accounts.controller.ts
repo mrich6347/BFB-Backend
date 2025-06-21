@@ -58,7 +58,7 @@ export class AccountsController {
     @Param('id', ParseUUIDPipe) id: string,
     @Body() updateBalanceDto: UpdateTrackingBalanceDto,
     @Req() req: any
-  ): Promise<AccountWithReadyToAssignResponse> {
+  ): Promise<ReconcileAccountResponse> {
     const authToken = this.authService.getAuthToken(req);
     return this.accountsService.updateTrackingBalance(id, updateBalanceDto.new_balance, updateBalanceDto.memo || '', req.user.id, authToken);
   }
