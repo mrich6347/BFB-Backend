@@ -12,6 +12,7 @@ import {
   ParseUUIDPipe
 } from '@nestjs/common';
 import { SharedGoalsService } from './shared-goals.service';
+import { SharedGoalsCollaborationService } from './shared-goals-collaboration.service';
 import {
   CreateSharedGoalDto,
   UpdateSharedGoalDto,
@@ -30,6 +31,7 @@ import { AuthService } from '../../configurations/auth/auth.service';
 export class SharedGoalsController {
   constructor(
     private readonly sharedGoalsService: SharedGoalsService,
+    private readonly sharedGoalsCollaborationService: SharedGoalsCollaborationService,
     private readonly authService: AuthService
   ) {}
 
@@ -51,7 +53,7 @@ export class SharedGoalsController {
   @Get('invitations')
   async getInvitations(@Req() req: any): Promise<InvitationResponse[]> {
     const authToken = this.authService.getAuthToken(req);
-    return this.sharedGoalsService.getInvitations(req.user.id, authToken);
+    return this.sharedGoalsCollaborationService.getInvitations(req.user.id, authToken);
   }
 
   @Post('invitations/:invitationId/accept')
@@ -60,7 +62,7 @@ export class SharedGoalsController {
     @Req() req: any
   ): Promise<void> {
     const authToken = this.authService.getAuthToken(req);
-    return this.sharedGoalsService.acceptInvitation(invitationId, req.user.id, authToken);
+    return this.sharedGoalsCollaborationService.acceptInvitation(invitationId, req.user.id, authToken);
   }
 
   @Post('invitations/:invitationId/decline')
@@ -69,7 +71,7 @@ export class SharedGoalsController {
     @Req() req: any
   ): Promise<void> {
     const authToken = this.authService.getAuthToken(req);
-    return this.sharedGoalsService.declineInvitation(invitationId, req.user.id, authToken);
+    return this.sharedGoalsCollaborationService.declineInvitation(invitationId, req.user.id, authToken);
   }
 
   @Get(':id')
@@ -101,7 +103,7 @@ export class SharedGoalsController {
     @Req() req: any
   ): Promise<InvitationResponse> {
     const authToken = this.authService.getAuthToken(req);
-    return this.sharedGoalsService.inviteUser(goalId, createInvitationDto, req.user.id, authToken);
+    return this.sharedGoalsCollaborationService.inviteUser(goalId, createInvitationDto, req.user.id, authToken);
   }
 
   // ===== PARTICIPANT ENDPOINTS =====
@@ -112,7 +114,7 @@ export class SharedGoalsController {
     @Req() req: any
   ): Promise<GoalParticipantResponse[]> {
     const authToken = this.authService.getAuthToken(req);
-    return this.sharedGoalsService.getGoalParticipants(goalId, req.user.id, authToken);
+    return this.sharedGoalsCollaborationService.getGoalParticipants(goalId, req.user.id, authToken);
   }
 
   @Post(':id/leave')
@@ -121,7 +123,7 @@ export class SharedGoalsController {
     @Req() req: any
   ): Promise<void> {
     const authToken = this.authService.getAuthToken(req);
-    return this.sharedGoalsService.leaveGoal(goalId, req.user.id, authToken);
+    return this.sharedGoalsCollaborationService.leaveGoal(goalId, req.user.id, authToken);
   }
 
   @Put(':id/participant')
@@ -131,7 +133,7 @@ export class SharedGoalsController {
     @Req() req: any
   ): Promise<void> {
     const authToken = this.authService.getAuthToken(req);
-    return this.sharedGoalsService.updateParticipant(goalId, updateParticipantDto, req.user.id, authToken);
+    return this.sharedGoalsCollaborationService.updateParticipant(goalId, updateParticipantDto, req.user.id, authToken);
   }
 
   @Delete(':id/participant/:participantId')
@@ -141,7 +143,7 @@ export class SharedGoalsController {
     @Req() req: any
   ): Promise<void> {
     const authToken = this.authService.getAuthToken(req);
-    return this.sharedGoalsService.removeParticipant(goalId, participantId, req.user.id, authToken);
+    return this.sharedGoalsCollaborationService.removeParticipant(goalId, participantId, req.user.id, authToken);
   }
 
   // ===== PROGRESS ENDPOINTS =====

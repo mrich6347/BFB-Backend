@@ -10,6 +10,7 @@ import { TransactionsService } from '../transactions/transactions.service';
 import { AutoAssignService } from '../auto-assign/auto-assign.service';
 import { UserProfilesService } from '../user-profiles/user-profiles.service';
 import { SharedGoalsService } from '../shared-goals/shared-goals.service';
+import { SharedGoalsCollaborationService } from '../shared-goals/shared-goals-collaboration.service';
 import { UserDateContextUtils, WithUserDateContext } from '../../common/interfaces/user-date-context.interface';
 
 @Injectable()
@@ -24,7 +25,8 @@ export class MainDataService {
         private readonly transactionsService: TransactionsService,
         private readonly autoAssignService: AutoAssignService,
         private readonly userProfilesService: UserProfilesService,
-        private readonly sharedGoalsService: SharedGoalsService
+        private readonly sharedGoalsService: SharedGoalsService,
+        private readonly sharedGoalsCollaborationService: SharedGoalsCollaborationService
     ) {}
 
     async getMainData(budgetId: string, authToken: string, userId: string, userDateContext?: WithUserDateContext): Promise<MainDataResponse> {
@@ -42,7 +44,7 @@ export class MainDataService {
             this.autoAssignService.findAllByBudget(budgetId, userId, authToken),
             this.userProfilesService.findByUserId(userId, authToken),
             this.sharedGoalsService.findByUserId(userId, budgetId, authToken),
-            this.sharedGoalsService.getInvitations(userId, authToken)
+            this.sharedGoalsCollaborationService.getInvitations(userId, authToken)
         ]);
 
 
