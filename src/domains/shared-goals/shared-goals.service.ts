@@ -63,13 +63,10 @@ export class SharedGoalsService {
     // Automatically add creator as participant
     await this.addCreatorAsParticipant(data.id, userProfile.id, userId, authToken);
 
-    // Transform the response to match our DTO structure
-    const transformedData: SharedGoalResponse = {
-      ...data,
-      creator_profile: Array.isArray(data.creator_profile) ? data.creator_profile[0] : data.creator_profile
-    };
+    // Fetch the complete goal data with participants to return
+    const completeGoal = await this.findById(data.id, userId, authToken);
 
-    return transformedData;
+    return completeGoal;
   }
 
   async findByUserId(userId: string, budgetId: string, authToken: string): Promise<SharedGoalResponse[]> {
@@ -148,11 +145,15 @@ export class SharedGoalsService {
       index === self.findIndex(g => g.id === goal.id)
     );
 
-    // Filter goals where user is either creator or participant, and get all active participants
+    console.log(`[SharedGoalsService] Found ${allGoals.length} total goals, ${uniqueGoals.length} unique goals`);
+
+    // Filter goals where user is either creator or participant
     const validGoals = uniqueGoals.filter(goal => {
-      // Check if user is creator
+      // Check if user is creator - creators should see their goals regardless of budget
       if (goal.created_by === userProfile.id) {
-        return true;
+        // But only if they have at least one participant record (meaning they joined their own goal)
+        const creatorParticipant = goal.participants?.find(p => p.user_profile_id === userProfile.id);
+        return !!creatorParticipant;
       }
 
       // Check if user is a participant for the specific budget
@@ -174,7 +175,18 @@ export class SharedGoalsService {
         }));
 
         // Use progress calculation service to get full progress data with contribution percentages
-        const progressData = await this.progressCalculationService.calculateGoalProgress(goal.id, userId, authToken);
+        let progressData;
+        try {
+          progressData = await this.progressCalculationService.calculateGoalProgress(goal.id, userId, authToken);
+        } catch (error) {
+          console.log(`Error calculating progress for goal ${goal.id}:`, error);
+          // Skip this goal if progress calculation fails
+          return null;
+        }
+
+        if (!progressData) {
+          return null;
+        }
 
         const transformedGoal: SharedGoalResponse = {
           ...progressData.goal,
@@ -185,8 +197,9 @@ export class SharedGoalsService {
       })
     );
 
-    // Sort by created_at desc
-    return goalsWithProgress.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+    // Filter out null results and sort by created_at desc
+    const validGoalsWithProgress = goalsWithProgress.filter(goal => goal !== null);
+    return validGoalsWithProgress.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
   }
 
   async findById(goalId: string, userId: string, authToken: string): Promise<SharedGoalResponse> {

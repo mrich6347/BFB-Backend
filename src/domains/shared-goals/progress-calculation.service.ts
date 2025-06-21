@@ -16,7 +16,7 @@ export class ProgressCalculationService {
         id, name, description, target_amount, target_date, created_by, status, created_at, updated_at,
         creator_profile:user_profiles!shared_goals_created_by_fkey(username, display_name),
         participants:goal_participants(
-          id, goal_id, user_profile_id, monthly_contribution, category_id, budget_id, status, joined_at,
+          id, goal_id, user_profile_id, monthly_contribution, category_id, budget_id, joined_at,
           user_profile:user_profiles(username, display_name)
         )
       `)
@@ -24,6 +24,7 @@ export class ProgressCalculationService {
       .single();
 
     if (goalError || !goal) {
+      console.log('Goal not found error:', goalError, 'Goal ID:', goalId);
       throw new Error('Goal not found');
     }
 
@@ -36,7 +37,7 @@ export class ProgressCalculationService {
 
     if (goal.participants && goal.participants.length > 0) {
       for (const participant of goal.participants) {
-        if (participant.status === 'ACTIVE' && participant.category_id) {
+        if (participant.category_id) {
           // Get current category balance for this participant
           const contribution = await this.getParticipantContribution(
             participant.category_id,
