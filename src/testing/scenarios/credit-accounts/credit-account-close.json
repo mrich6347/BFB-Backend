@@ -1,0 +1,54 @@
+{
+  "name": "Credit Account Close Test",
+  "description": "Create budget, create credit card account, close the account, verify payment category is moved to hidden categories",
+  "steps": [
+    {
+      "action": "create_budget",
+      "description": "Create test budget",
+      "params": {
+        "name": "Test Budget",
+        "currency": "USD",
+        "currency_placement": "BEFORE",
+        "date_format": "US_SLASH",
+        "number_format": "DOT_COMMA"
+      }
+    },
+    {
+      "action": "create_account",
+      "description": "Create Citi Double credit card account",
+      "params": {
+        "name": "Citi Double",
+        "account_type": "CREDIT",
+        "account_balance": -500
+      }
+    },
+    {
+      "action": "close_account",
+      "description": "Close the Citi Double credit card account",
+      "params": {
+        "account_name": "Citi Double"
+      }
+    },
+    {
+      "action": "get_state",
+      "description": "Get final state to verify payment category is in hidden categories",
+      "params": {}
+    }
+  ],
+  "expectedFinalState": {
+    "readyToAssign": 0,
+    "accounts": {
+      "Citi Double": {
+        "is_active": false
+      }
+    },
+    "categories": {
+      "Citi Double Payment": {
+        "category_group_name": "Hidden Categories",
+        "assigned": 0,
+        "activity": 0,
+        "available": 0
+      }
+    }
+  }
+}

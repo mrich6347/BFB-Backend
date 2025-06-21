@@ -19,7 +19,8 @@ export interface TestScenario {
 export interface TestStep {
   action: 'create_budget' | 'create_account' | 'create_category_group' | 'create_category' |
           'create_transaction' | 'delete_transaction' | 'update_transaction' | 'delete_category' |
-          'assign_money' | 'move_money_to_ready_to_assign' | 'get_state' | 'trigger_month_rollover';
+          'assign_money' | 'move_money_to_ready_to_assign' | 'get_state' | 'trigger_month_rollover' | 
+          'close_account';
   description: string;
   params: any;
   expectedResult?: any;
@@ -147,6 +148,8 @@ export class YnabTestRunner {
           return await this.assignMoney(step.params);
         case 'move_money_to_ready_to_assign':
           return await this.moveMoneyToReadyToAssign(step.params);
+        case 'close_account':
+          return await this.closeAccount(step.params);
         case 'get_state':
           return await this.getState(step.params);
         case 'trigger_month_rollover':
@@ -389,6 +392,23 @@ export class YnabTestRunner {
     return { success: false, error: response.body.message || 'Failed to move money to ready to assign' };
   }
 
+  private async closeAccount(params: any): Promise<StepResult> {
+    const accountId = this.testData.accounts[params.account_name];
+
+    if (!accountId) {
+      return { success: false, error: `Account '${params.account_name}' not found` };
+    }
+
+    const response = await request(this.app.getHttpServer())
+      .delete(`/accounts/${accountId}`)
+      .set('Authorization', `Bearer ${this.authToken}`);
+
+    if (response.status === 200) {
+      return { success: true, data: response.body };
+    }
+    return { success: false, error: response.body.message || 'Failed to close account' };
+  }
+
   private async getState(params?: any): Promise<StepResult> {
     const state = await this.getCurrentState(params);
     return { success: true, data: state };
@@ -461,24 +481,31 @@ export class YnabTestRunner {
       // Find all categories with this name
       const matchingCategories = actual.categories.filter(cat => cat.name === categoryName);
 
-      // Find the category balance for each matching category
-      let actualCategory = null;
-      for (const cat of matchingCategories) {
-        const balance = actual.categoryBalances.find(c => c.category_id === cat.id);
-        if (balance) {
-          actualCategory = balance;
-          break; // Use the first one that has a balance record
-        }
+      if (matchingCategories.length === 0) {
+        errors.push(`Category '${categoryName}' not found`);
+        continue;
       }
 
-      if (!actualCategory) {
-        errors.push(`Category '${categoryName}' not found in categoryBalances`);
+      const actualCategoryData = matchingCategories[0]; // Use the first match
+
+      // Find the category balance
+      const actualCategoryBalance = actual.categoryBalances.find(c => c.category_id === actualCategoryData.id);
+
+      if (!actualCategoryBalance) {
+        errors.push(`Category '${categoryName}' balance not found`);
         continue;
       }
 
       for (const [field, expectedValue] of Object.entries(expectedCategory)) {
-        if (actualCategory[field] !== expectedValue) {
-          errors.push(`Category '${categoryName}' ${field}: expected ${expectedValue}, got ${actualCategory[field]}`);
+        if (field === 'category_group_name') {
+          // Special handling for category group name
+          const categoryGroup = actual.categoryGroups.find(g => g.id === actualCategoryData.category_group_id);
+          const actualGroupName = categoryGroup ? categoryGroup.name : 'Unknown';
+          if (actualGroupName !== expectedValue) {
+            errors.push(`Category '${categoryName}' ${field}: expected ${expectedValue}, got ${actualGroupName}`);
+          }
+        } else if (actualCategoryBalance[field] !== expectedValue) {
+          errors.push(`Category '${categoryName}' ${field}: expected ${expectedValue}, got ${actualCategoryBalance[field]}`);
         }
       }
     }

@@ -5,6 +5,7 @@ import { SupabaseClient } from '@supabase/supabase-js';
 import { ReadyToAssignService } from '../ready-to-assign/ready-to-assign.service';
 import { TransactionsService } from '../transactions/transactions.service';
 import { TransactionResponse } from '../transactions/dto/transaction.dto';
+import { CategoriesService } from '../categories/categories.service';
 
 @Injectable()
 export class AccountsService {
@@ -13,7 +14,8 @@ export class AccountsService {
   constructor(
     private supabaseService: SupabaseService,
     private readyToAssignService: ReadyToAssignService,
-    private transactionsService: TransactionsService
+    private transactionsService: TransactionsService,
+    private categoriesService: CategoriesService
   ) {
     this.supabase = this.supabaseService.client;
   }
@@ -195,6 +197,11 @@ export class AccountsService {
 
     if (updateError) {
       throw new Error(updateError.message);
+    }
+
+    // If this was a credit card account, move the payment category to Hidden Categories
+    if (account.account_type === 'CREDIT') {
+      await this.movePaymentCategoryToHidden(account.name, account.budget_id, userId, authToken);
     }
 
     // Get updated account
@@ -476,6 +483,39 @@ export class AccountsService {
       adjustmentTransaction,
       readyToAssign
     };
+  }
+
+  /**
+   * Move the payment category for a credit card account to Hidden Categories
+   */
+  private async movePaymentCategoryToHidden(accountName: string, budgetId: string, userId: string, authToken: string): Promise<void> {
+    const supabase = this.supabaseService.getAuthenticatedClient(authToken);
+
+    // Find the payment category for this credit card account
+    const paymentCategoryName = `${accountName} Payment`;
+
+    const { data: paymentCategory, error: findError } = await supabase
+      .from('categories')
+      .select('id')
+      .eq('name', paymentCategoryName)
+      .eq('budget_id', budgetId)
+      .eq('user_id', userId)
+      .single();
+
+    if (findError || !paymentCategory) {
+      // Payment category not found - this is okay, maybe it was already deleted or never existed
+      console.log(`Payment category '${paymentCategoryName}' not found for account '${accountName}'`);
+      return;
+    }
+
+    try {
+      // Use the categories service to hide the payment category
+      await this.categoriesService.hide(paymentCategory.id, userId, authToken);
+      console.log(`Moved payment category '${paymentCategoryName}' to Hidden Categories`);
+    } catch (error) {
+      console.error(`Failed to move payment category '${paymentCategoryName}' to Hidden Categories:`, error);
+      // Don't throw - account closure should still succeed even if category move fails
+    }
   }
 
 }
