@@ -13,9 +13,9 @@ export class DatabaseManagementService {
     // Get all tables that have user data
     const tables = await this.getUserTables(supabase);
 
-    // Delete data from each table for the current user
+    // Delete ALL data from each table for ALL users (complete nuke)
     for (const table of tables) {
-      await this.clearTableForUser(supabase, table, userId);
+      await this.clearEntireTable(supabase, table);
     }
   }
 
@@ -46,6 +46,28 @@ export class DatabaseManagementService {
       'budgets',                // References user_profiles
       'user_profiles'           // Parent table - delete last
     ];
+  }
+
+  private async clearEntireTable(supabase: SupabaseClient, table: string): Promise<void> {
+    try {
+      console.log(`Nuking all data from table: ${table}`);
+
+      // Delete ALL data from the table (no user filtering)
+      const { error } = await supabase
+        .from(table)
+        .delete()
+        .neq('id', '00000000-0000-0000-0000-000000000000'); // This condition will match all rows since no ID will be this value
+
+      if (error) {
+        console.error(`Error clearing table ${table}:`, error);
+        throw new Error(`Failed to clear table ${table}: ${error.message}`);
+      }
+
+      console.log(`Successfully nuked all data from table: ${table}`);
+    } catch (error) {
+      console.error(`Error clearing table ${table}:`, error);
+      throw error;
+    }
   }
 
   private async clearTableForUser(supabase: SupabaseClient, table: string, userId: string): Promise<void> {
