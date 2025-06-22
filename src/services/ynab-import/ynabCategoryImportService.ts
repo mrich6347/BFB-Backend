@@ -207,21 +207,28 @@ export class YnabCategoryImportService {
     const groupMap = new Map<string, string>();
     createdGroups.forEach(group => {
       groupMap.set(group.name, group.id);
+      console.log(`Group mapping: "${group.name}" -> ${group.id} (system: ${group.is_system_group})`);
     });
 
     for (const category of categories) {
       try {
         const groupId = groupMap.get(category.categoryGroupName);
         if (!groupId) {
-          console.warn(`Category group not found for category "${category.name}"`);
+          console.warn(`Category group not found for category "${category.name}" in group "${category.categoryGroupName}"`);
           continue;
         }
 
-        // Skip creating categories for system groups (they're auto-created)
+        // For system groups, we should still create categories from YNAB import
+        // Only skip if this is a credit card payment category (auto-created by triggers)
         const group = createdGroups.find(g => g.id === groupId);
-        if (group?.is_system_group) {
-          console.log(`Skipping category "${category.name}" in system group "${group.name}"`);
+        if (group?.is_system_group && group.name === 'Credit Card Payments') {
+          console.log(`Skipping auto-created credit card payment category "${category.name}"`);
           continue;
+        }
+
+        // Log when we're creating a category in a system group (like Hidden Categories)
+        if (group?.is_system_group) {
+          console.log(`Creating category "${category.name}" in system group "${group.name}"`);
         }
 
         const categoryDto: CreateCategoryDto = {
