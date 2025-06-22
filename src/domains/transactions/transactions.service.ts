@@ -304,6 +304,21 @@ export class TransactionsService {
         const amountChanged = originalTransaction.amount !== data.amount;
         const dateChanged = originalTransaction.date !== data.date;
 
+        // Handle credit card logic for updates FIRST (before category activity updates)
+        if (amountChanged || categoryChanged) {
+          await this.handleCreditCardTransactionUpdate(
+            id,
+            data.account_id,
+            originalTransaction,
+            data,
+            budgetId,
+            userId,
+            authToken,
+            updateTransactionDto.userYear,
+            updateTransactionDto.userMonth
+          );
+        }
+
         // If category changed, reverse activity from old category (but not if it was ready-to-assign)
         if (categoryChanged && originalTransaction.category_id && originalTransaction.amount !== 0 && !wasReadyToAssign) {
           await this.updateCategoryActivity(
@@ -480,7 +495,17 @@ export class TransactionsService {
 
       if (budgetId) {
         try {
-          // For cash transactions, do the regular category activity reversal
+          // Handle credit card transaction deletion FIRST
+          await this.handleCreditCardTransactionDeletion(
+            transaction.id,
+            transaction.account_id,
+            transaction,
+            budgetId,
+            userId,
+            authToken
+          );
+
+          // For all transactions, do the regular category activity reversal
           await this.updateCategoryActivity(
             transaction.category_id,
             budgetId,
@@ -1380,13 +1405,13 @@ export class TransactionsService {
       console.log(`✅ Created debt tracking record: debt=$${spendingAmount}, covered=$${availableToMove}`);
 
       // YNAB Logic: Add positive activity to payment category to represent automatic coverage
+      // Only add the amount that was actually covered from the spending category
       if (availableToMove > 0) {
-        // Add positive activity to the payment category (this represents the automatic money movement)
         await this.updateCategoryActivity(
           paymentCategory.id,
           budgetId,
           new Date().toISOString().split('T')[0], // Use current date for the automatic movement
-          availableToMove, // Positive amount for payment category
+          availableToMove, // Only the covered amount for payment category
           userId,
           authToken,
           undefined, // userCurrentDate
@@ -1401,6 +1426,308 @@ export class TransactionsService {
     } catch (error) {
       console.error('Error in YNAB credit card logic:', error);
       // Don't throw - this is automatic behavior, transaction should still succeed
+    }
+  }
+
+  /**
+   * Handle YNAB-style automatic money movement for credit card transaction updates
+   * When a credit card transaction is updated:
+   * 1. Check existing debt tracking record to see how much was originally covered
+   * 2. Reverse the original payment category activity
+   * 3. Apply new payment category activity based on new transaction amount
+   * 4. Update the debt tracking record
+   */
+  private async handleCreditCardTransactionUpdate(
+    transactionId: string,
+    accountId: string,
+    originalTransaction: any,
+    updatedTransaction: any,
+    budgetId: string,
+    userId: string,
+    authToken: string,
+    userYear?: number,
+    userMonth?: number
+  ): Promise<void> {
+    const supabase = this.supabaseService.getAuthenticatedClient(authToken);
+
+    // Check if this is a credit card account
+    const { data: account, error: accountError } = await supabase
+      .from('accounts')
+      .select('account_type, name')
+      .eq('id', accountId)
+      .eq('user_id', userId)
+      .single();
+
+    if (accountError || !account || account.account_type !== 'CREDIT') {
+      // Not a credit card transaction, no special handling needed
+      return;
+    }
+
+    // Only handle outflow transactions (spending)
+    const originalAmount = originalTransaction.amount;
+    const newAmount = updatedTransaction.amount;
+
+    if (originalAmount >= 0 && newAmount >= 0) {
+      // Neither original nor new transaction is spending, no credit card logic needed
+      return;
+    }
+
+    try {
+      // Get existing debt tracking record
+      const { data: existingDebtRecord, error: debtFetchError } = await supabase
+        .from('credit_card_debt_tracking')
+        .select('*')
+        .eq('transaction_id', transactionId)
+        .eq('user_id', userId)
+        .single();
+
+      if (debtFetchError && debtFetchError.code !== 'PGRST116') {
+        console.error('Error fetching debt tracking record:', debtFetchError);
+        return;
+      }
+
+      // Find the payment category for this credit card
+      const paymentCategoryName = `${account.name} Payment`;
+      const { data: paymentCategory, error: paymentCategoryError } = await supabase
+        .from('categories')
+        .select('id, name')
+        .eq('name', paymentCategoryName)
+        .eq('budget_id', budgetId)
+        .eq('user_id', userId)
+        .single();
+
+      if (paymentCategoryError) {
+        console.error(`Payment category '${paymentCategoryName}' not found:`, paymentCategoryError);
+        return;
+      }
+
+      // If we have an existing debt record, reverse the original payment category activity
+      if (existingDebtRecord && existingDebtRecord.covered_amount > 0) {
+        console.log(`🔄 Reversing original payment category activity: -$${existingDebtRecord.covered_amount}`);
+
+        await this.updateCategoryActivity(
+          paymentCategory.id,
+          budgetId,
+          new Date().toISOString().split('T')[0],
+          -existingDebtRecord.covered_amount, // Negative to reverse
+          userId,
+          authToken,
+          undefined,
+          userYear,
+          userMonth
+        );
+      }
+
+      // If the new transaction is spending, apply new credit card logic
+      if (newAmount < 0) {
+        const newSpendingAmount = Math.abs(newAmount);
+
+        // Get current available balance for the spending category
+        const { year: currentYear, month: currentMonth } = UserDateContextUtils.getCurrentUserDate({
+          userYear,
+          userMonth
+        });
+
+        const availableBalance = await this.categoryBalancesService.findByCategory(
+          updatedTransaction.category_id,
+          currentYear,
+          currentMonth,
+          userId,
+          authToken
+        );
+
+        // Calculate available to move based on what was originally covered plus any additional available
+        // First, get the original covered amount from the debt record
+        const originalCoveredAmount = existingDebtRecord ? existingDebtRecord.covered_amount : 0;
+
+        // Then calculate how much additional is available (if any)
+        const currentAvailable = Math.max(0, (availableBalance?.available || 0));
+
+        // The total available to move is the original covered amount plus any additional available
+        const availableToMove = Math.min(
+          newSpendingAmount,
+          originalCoveredAmount + currentAvailable
+        );
+
+        console.log(`💳 New credit card spending: $${newSpendingAmount}, available to move: $${availableToMove}`);
+
+        // Apply new payment category activity - only add the amount that was covered
+        if (availableToMove > 0) {
+          await this.updateCategoryActivity(
+            paymentCategory.id,
+            budgetId,
+            new Date().toISOString().split('T')[0],
+            availableToMove, // Only the covered amount for payment category
+            userId,
+            authToken,
+            undefined,
+            userYear,
+            userMonth
+          );
+
+          console.log(`✅ YNAB Credit Card Logic Update: Added $${availableToMove} activity to '${paymentCategoryName}'`);
+        } else {
+          console.log(`ℹ️ No money available to cover from category to payment category`);
+        }
+
+        // Update or create debt tracking record
+        if (existingDebtRecord) {
+          const { error: updateError } = await supabase
+            .from('credit_card_debt_tracking')
+            .update({
+              debt_amount: newSpendingAmount,
+              covered_amount: availableToMove,
+              original_category_id: updatedTransaction.category_id
+            })
+            .eq('id', existingDebtRecord.id);
+
+          if (updateError) {
+            console.error('Error updating debt tracking record:', updateError);
+          } else {
+            console.log(`✅ Updated debt tracking record: debt=$${newSpendingAmount}, covered=$${availableToMove}`);
+          }
+        } else {
+          // Create new debt tracking record
+          const { error: createError } = await supabase
+            .from('credit_card_debt_tracking')
+            .insert({
+              transaction_id: transactionId,
+              credit_card_account_id: accountId,
+              original_category_id: updatedTransaction.category_id,
+              debt_amount: newSpendingAmount,
+              covered_amount: availableToMove,
+              user_id: userId,
+              budget_id: budgetId
+            });
+
+          if (createError) {
+            console.error('Error creating debt tracking record:', createError);
+          } else {
+            console.log(`✅ Created new debt tracking record: debt=$${newSpendingAmount}, covered=$${availableToMove}`);
+          }
+        }
+      } else {
+        // Transaction is no longer spending, delete debt tracking record if it exists
+        if (existingDebtRecord) {
+          const { error: deleteError } = await supabase
+            .from('credit_card_debt_tracking')
+            .delete()
+            .eq('id', existingDebtRecord.id);
+
+          if (deleteError) {
+            console.error('Error deleting debt tracking record:', deleteError);
+          } else {
+            console.log(`✅ Deleted debt tracking record (transaction no longer spending)`);
+          }
+        }
+      }
+
+    } catch (error) {
+      console.error('Error handling credit card transaction update:', error);
+      // Don't throw - this is supplementary logic, main transaction should still succeed
+    }
+  }
+
+  /**
+   * Handle YNAB-style automatic money movement for credit card transaction deletion
+   * When a credit card transaction is deleted:
+   * 1. Check existing debt tracking record to see how much was covered
+   * 2. Reverse the payment category activity based on covered amount
+   * 3. Delete the debt tracking record
+   */
+  private async handleCreditCardTransactionDeletion(
+    transactionId: string,
+    accountId: string,
+    transaction: any,
+    budgetId: string,
+    userId: string,
+    authToken: string
+  ): Promise<void> {
+    const supabase = this.supabaseService.getAuthenticatedClient(authToken);
+
+    // Check if this is a credit card account
+    const { data: account, error: accountError } = await supabase
+      .from('accounts')
+      .select('account_type, name')
+      .eq('id', accountId)
+      .eq('user_id', userId)
+      .single();
+
+    if (accountError || !account || account.account_type !== 'CREDIT') {
+      // Not a credit card transaction, no special handling needed
+      return;
+    }
+
+    // Only handle outflow transactions (spending)
+    if (transaction.amount >= 0) {
+      return;
+    }
+
+    try {
+      // Get existing debt tracking record
+      const { data: existingDebtRecord, error: debtFetchError } = await supabase
+        .from('credit_card_debt_tracking')
+        .select('*')
+        .eq('transaction_id', transactionId)
+        .eq('user_id', userId)
+        .single();
+
+      if (debtFetchError && debtFetchError.code !== 'PGRST116') {
+        console.error('Error fetching debt tracking record for deletion:', debtFetchError);
+        return;
+      }
+
+      if (!existingDebtRecord) {
+        console.log(`ℹ️ No debt tracking record found for transaction ${transactionId}`);
+        return;
+      }
+
+      // Find the payment category for this credit card
+      const paymentCategoryName = `${account.name} Payment`;
+      const { data: paymentCategory, error: paymentCategoryError } = await supabase
+        .from('categories')
+        .select('id, name')
+        .eq('name', paymentCategoryName)
+        .eq('budget_id', budgetId)
+        .eq('user_id', userId)
+        .single();
+
+      if (paymentCategoryError) {
+        console.error(`Payment category '${paymentCategoryName}' not found:`, paymentCategoryError);
+        return;
+      }
+
+      // Reverse the payment category activity based on covered amount
+      if (existingDebtRecord.covered_amount > 0) {
+        console.log(`🔄 Reversing payment category activity for deletion: -$${existingDebtRecord.covered_amount}`);
+
+        await this.updateCategoryActivity(
+          paymentCategory.id,
+          budgetId,
+          new Date().toISOString().split('T')[0],
+          -existingDebtRecord.covered_amount, // Negative to reverse
+          userId,
+          authToken
+        );
+
+        console.log(`✅ YNAB Credit Card Logic Deletion: Removed $${existingDebtRecord.covered_amount} activity from '${paymentCategoryName}'`);
+      }
+
+      // Delete the debt tracking record
+      const { error: deleteError } = await supabase
+        .from('credit_card_debt_tracking')
+        .delete()
+        .eq('id', existingDebtRecord.id);
+
+      if (deleteError) {
+        console.error('Error deleting debt tracking record:', deleteError);
+      } else {
+        console.log(`✅ Deleted debt tracking record for transaction ${transactionId}`);
+      }
+
+    } catch (error) {
+      console.error('Error handling credit card transaction deletion:', error);
+      // Don't throw - this is supplementary logic, main transaction should still succeed
     }
   }
 

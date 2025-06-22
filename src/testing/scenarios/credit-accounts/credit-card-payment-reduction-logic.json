@@ -1,0 +1,100 @@
+{
+  "name": "Credit Card Payment Reduction Logic Test",
+  "description": "Test YNAB-style automatic money movement when credit card transaction amount is reduced from $50 to $25",
+  "steps": [
+    {
+      "action": "create_budget",
+      "description": "Create test budget",
+      "params": {
+        "name": "Test Budget",
+        "currency": "USD",
+        "currency_placement": "BEFORE",
+        "date_format": "US_SLASH",
+        "number_format": "DOT_COMMA"
+      }
+    },
+    {
+      "action": "assign_money",
+      "description": "Assign $50 to Rent/Mortgage category",
+      "params": {
+        "category_name": "Rent/Mortgage",
+        "amount": 50
+      }
+    },
+    {
+      "action": "get_state",
+      "description": "Verify initial state - Rent/Mortgage should have $50 assigned, $0 activity, $50 available",
+      "params": {}
+    },
+    {
+      "action": "create_account",
+      "description": "Create Citi Double credit card account",
+      "params": {
+        "name": "Citi Double",
+        "account_type": "CREDIT",
+        "account_balance": 0
+      }
+    },
+    {
+      "action": "get_state",
+      "description": "Verify credit account and payment category creation",
+      "params": {}
+    },
+    {
+      "action": "create_transaction",
+      "description": "Create $50 outflow transaction on credit card for Rent/Mortgage",
+      "params": {
+        "account_name": "Citi Double",
+        "payee": "Landlord",
+        "category_name": "Rent/Mortgage",
+        "amount": -50,
+        "date": "2025-06-21",
+        "memo": "Monthly rent payment"
+      }
+    },
+    {
+      "action": "get_state",
+      "description": "Get state after initial $50 transaction",
+      "params": {}
+    },
+    {
+      "action": "update_transaction",
+      "description": "Update transaction amount from $50 to $25 outflow",
+      "params": {
+        "account_name": "Citi Double",
+        "payee": "Landlord",
+        "category_name": "Rent/Mortgage",
+        "amount": -25,
+        "date": "2025-06-21",
+        "memo": "Monthly rent payment - reduced amount"
+      }
+    },
+    {
+      "action": "get_state",
+      "description": "Get final state to verify YNAB-style money movement after reduction",
+      "params": {}
+    }
+  ],
+  "expectedFinalState": {
+    "readyToAssign": -50,
+    "accounts": {
+      "Citi Double": {
+        "account_type": "CREDIT",
+        "account_balance": 0,
+        "working_balance": -25
+      }
+    },
+    "categories": {
+      "Rent/Mortgage": {
+        "assigned": 50,
+        "activity": -25,
+        "available": 25
+      },
+      "Citi Double Payment": {
+        "assigned": 0,
+        "activity": 25,
+        "available": 25
+      }
+    }
+  }
+}
