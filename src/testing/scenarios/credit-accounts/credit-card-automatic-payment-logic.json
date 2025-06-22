@@ -1,0 +1,85 @@
+{
+  "name": "Credit Card Automatic Payment Logic Test",
+  "description": "Test YNAB-style automatic money movement from categories to credit card payment categories when credit card transactions are made",
+  "steps": [
+    {
+      "action": "create_budget",
+      "description": "Create test budget",
+      "params": {
+        "name": "Test Budget",
+        "currency": "USD",
+        "currency_placement": "BEFORE",
+        "date_format": "US_SLASH",
+        "number_format": "DOT_COMMA"
+      }
+    },
+
+
+    {
+      "action": "assign_money",
+      "description": "Assign $50 to Rent/Mortgage category",
+      "params": {
+        "category_name": "Rent/Mortgage",
+        "amount": 50
+      }
+    },
+    {
+      "action": "get_state",
+      "description": "Verify initial state - Rent/Mortgage should have $50 assigned, $0 activity, $50 available",
+      "params": {}
+    },
+    {
+      "action": "create_account",
+      "description": "Create Citi Double credit card account",
+      "params": {
+        "name": "Citi Double",
+        "account_type": "CREDIT",
+        "account_balance": 0
+      }
+    },
+    {
+      "action": "get_state",
+      "description": "Verify credit account and payment category creation",
+      "params": {}
+    },
+    {
+      "action": "create_transaction",
+      "description": "Create $50 outflow transaction on credit card for Rent/Mortgage",
+      "params": {
+        "account_name": "Citi Double",
+        "payee": "Landlord",
+        "category_name": "Rent/Mortgage",
+        "amount": -50,
+        "date": "2025-06-21",
+        "memo": "Monthly rent payment"
+      }
+    },
+    {
+      "action": "get_state",
+      "description": "Get final state to verify YNAB-style money movement",
+      "params": {}
+    }
+  ],
+  "expectedFinalState": {
+    "readyToAssign": -50,
+    "accounts": {
+      "Citi Double": {
+        "account_type": "CREDIT",
+        "account_balance": 0,
+        "working_balance": -50
+      }
+    },
+    "categories": {
+      "Rent/Mortgage": {
+        "assigned": 50,
+        "activity": -50,
+        "available": 0
+      },
+      "Citi Double Payment": {
+        "assigned": 0,
+        "activity": 50,
+        "available": 50
+      }
+    }
+  }
+}

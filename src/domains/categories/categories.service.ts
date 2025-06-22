@@ -1077,16 +1077,7 @@ export class CategoriesService {
       throw new Error('Destination category not found');
     }
 
-    // Calculate current Ready to Assign to validate we have enough
-    const currentReadyToAssign = await this.readyToAssignService.calculateReadyToAssign(
-      category.budget_id,
-      userId,
-      authToken
-    );
-
-    if (currentReadyToAssign < amount) {
-      throw new Error('Insufficient Ready to Assign balance');
-    }
+    // Allow Ready to Assign to go negative - no validation needed
 
     // Get or create the destination category balance for the specified month
     let { data: balance, error: balanceError } = await supabase

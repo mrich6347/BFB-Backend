@@ -3,6 +3,7 @@ import { SupabaseClient } from '@supabase/supabase-js';
 import { SupabaseService } from '../../supabase/supabase.service';
 import { CreateTransactionDto, UpdateTransactionDto, TransactionResponse, TransactionWithAccountsResponse, TransactionDeleteResponse } from './dto/transaction.dto';
 import { CategoryBalancesService } from '../category-balances/category-balances.service';
+import { CategoriesService } from '../categories/categories.service';
 import { UserDateContextUtils } from '../../common/interfaces/user-date-context.interface';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -12,7 +13,8 @@ export class TransactionsService {
 
   constructor(
     private supabaseService: SupabaseService,
-    private categoryBalancesService: CategoryBalancesService
+    private categoryBalancesService: CategoryBalancesService,
+    private categoriesService: CategoriesService
   ) {
     this.supabase = this.supabaseService.client;
   }
@@ -97,7 +99,21 @@ export class TransactionsService {
 
       if (budgetId) {
         try {
-          // For cash transactions, update category activity
+          // For credit card transactions, handle YNAB logic BEFORE updating category activity
+          // This ensures we check available balance before it's affected by the transaction
+          await this.handleCreditCardTransaction(
+            data.id,
+            data.account_id,
+            data.category_id,
+            data.amount,
+            budgetId,
+            userId,
+            authToken,
+            createTransactionDto.userYear,
+            createTransactionDto.userMonth
+          );
+
+          // Update category activity for all account types (after credit card logic)
           await this.updateCategoryActivity(
             data.category_id,
             budgetId,
@@ -1259,6 +1275,133 @@ export class TransactionsService {
     }
 
     return data;
+  }
+
+  /**
+   * Handle YNAB-style automatic money movement for credit card transactions
+   * When a credit card transaction is made:
+   * 1. Create a credit_card_debt_tracking record
+   * 2. Automatically move available money from the spending category to the payment category
+   * 3. Track debt_amount and covered_amount
+   */
+  private async handleCreditCardTransaction(
+    transactionId: string,
+    accountId: string,
+    categoryId: string,
+    amount: number,
+    budgetId: string,
+    userId: string,
+    authToken: string,
+    userYear?: number,
+    userMonth?: number
+  ): Promise<void> {
+    const supabase = this.supabaseService.getAuthenticatedClient(authToken);
+
+    // Check if this is a credit card account
+    const { data: account, error: accountError } = await supabase
+      .from('accounts')
+      .select('account_type, name')
+      .eq('id', accountId)
+      .eq('user_id', userId)
+      .single();
+
+    if (accountError || !account || account.account_type !== 'CREDIT') {
+      // Not a credit card transaction, no special handling needed
+      return;
+    }
+
+    // Only handle outflow transactions (spending)
+    if (amount >= 0) {
+      return;
+    }
+
+    const spendingAmount = Math.abs(amount); // Convert to positive amount
+
+    // Get current year and month for balance updates
+    const { year: currentYear, month: currentMonth } = UserDateContextUtils.getCurrentUserDate({
+      userYear,
+      userMonth
+    });
+
+    // Find the credit card payment category
+    const paymentCategoryName = `${account.name} Payment`;
+    const { data: paymentCategory, error: paymentCategoryError } = await supabase
+      .from('categories')
+      .select('id')
+      .eq('name', paymentCategoryName)
+      .eq('budget_id', budgetId)
+      .eq('user_id', userId)
+      .single();
+
+    if (paymentCategoryError || !paymentCategory) {
+      console.error(`Payment category '${paymentCategoryName}' not found for credit card transaction`);
+      return;
+    }
+
+    // Get the spending category's current available balance
+    const { data: spendingBalance, error: spendingBalanceError } = await supabase
+      .from('category_balances')
+      .select('available')
+      .eq('category_id', categoryId)
+      .eq('user_id', userId)
+      .eq('year', currentYear)
+      .eq('month', currentMonth)
+      .single();
+
+    if (spendingBalanceError || !spendingBalance) {
+      console.error(`Could not find spending category balance for YNAB credit card logic`);
+      return;
+    }
+
+    // Calculate how much money we can move (limited by available balance)
+    const availableToMove = Math.min(spendingAmount, spendingBalance.available || 0);
+
+    try {
+      // Create credit card debt tracking record
+      const { data: debtRecord, error: debtError } = await supabase
+        .from('credit_card_debt_tracking')
+        .insert({
+          transaction_id: transactionId,
+          credit_card_account_id: accountId,
+          original_category_id: categoryId,
+          debt_amount: spendingAmount,
+          covered_amount: availableToMove,
+          user_id: userId,
+          budget_id: budgetId
+        })
+        .select('*')
+        .single();
+
+      if (debtError) {
+        console.error('Error creating credit card debt tracking record:', debtError);
+        return;
+      }
+
+      console.log(`✅ Created debt tracking record: debt=$${spendingAmount}, covered=$${availableToMove}`);
+
+      // YNAB Logic: Add positive activity to payment category to represent automatic coverage
+      if (availableToMove > 0) {
+        // Add positive activity to the payment category (this represents the automatic money movement)
+        await this.updateCategoryActivity(
+          paymentCategory.id,
+          budgetId,
+          new Date().toISOString().split('T')[0], // Use current date for the automatic movement
+          availableToMove, // Positive amount for payment category
+          userId,
+          authToken,
+          undefined, // userCurrentDate
+          userYear,
+          userMonth
+        );
+
+        console.log(`✅ YNAB Credit Card Logic: Added $${availableToMove} activity to '${paymentCategoryName}'`);
+      } else {
+        console.log(`ℹ️ No money available to cover from category to payment category`);
+      }
+    } catch (error) {
+      console.error('Error in YNAB credit card logic:', error);
+      // Don't throw - this is automatic behavior, transaction should still succeed
+    }
   }
 
 
