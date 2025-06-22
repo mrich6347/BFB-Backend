@@ -162,6 +162,9 @@ export class DatabaseManagementService {
     // Create budget
     const budget = await this.createSampleBudget(supabase, userId);
 
+    // Clear any default categories/category groups created by triggers
+    await this.clearDefaultCategoriesAfterBudgetCreation(supabase, userId, budget.id);
+
     // Create accounts
     const accounts = await this.createSampleAccounts(supabase, userId, budget.id);
 
@@ -202,18 +205,57 @@ export class DatabaseManagementService {
     return data;
   }
 
+  private async clearDefaultCategoriesAfterBudgetCreation(supabase: SupabaseClient, userId: string, budgetId: string): Promise<void> {
+    // Clear any default categories created by database triggers when the budget was created
+    // This ensures we start with a clean slate for our custom categories
+
+    // First clear category balances for this budget
+    const { error: balanceError } = await supabase
+      .from('category_balances')
+      .delete()
+      .eq('budget_id', budgetId)
+      .eq('user_id', userId);
+
+    if (balanceError) {
+      console.error('Error clearing default category balances:', balanceError);
+    }
+
+    // Then clear categories for this budget
+    const { error: categoryError } = await supabase
+      .from('categories')
+      .delete()
+      .eq('budget_id', budgetId)
+      .eq('user_id', userId);
+
+    if (categoryError) {
+      console.error('Error clearing default categories:', categoryError);
+    }
+
+    // Finally clear category groups for this budget
+    const { error: groupError } = await supabase
+      .from('category_groups')
+      .delete()
+      .eq('budget_id', budgetId)
+      .eq('user_id', userId);
+
+    if (groupError) {
+      console.error('Error clearing default category groups:', groupError);
+    }
+  }
+
   private async createSampleAccounts(supabase: SupabaseClient, userId: string, budgetId: string): Promise<any[]> {
     const accountsData = [
+      // Cash Accounts
       {
         id: uuidv4(),
         user_id: userId,
         budget_id: budgetId,
-        name: 'Checking Account',
+        name: 'Wells Fargo Checking',
         account_type: 'CASH',
-        account_balance: 5000,
-        cleared_balance: 5000,
+        account_balance: 0,
+        cleared_balance: 0,
         uncleared_balance: 0,
-        working_balance: 5000,
+        working_balance: 0,
         is_active: true,
         display_order: 1
       },
@@ -221,12 +263,12 @@ export class DatabaseManagementService {
         id: uuidv4(),
         user_id: userId,
         budget_id: budgetId,
-        name: 'Savings Account',
+        name: 'Citi Emergency Fund',
         account_type: 'CASH',
-        account_balance: 15000,
-        cleared_balance: 15000,
+        account_balance: 0,
+        cleared_balance: 0,
         uncleared_balance: 0,
-        working_balance: 15000,
+        working_balance: 0,
         is_active: true,
         display_order: 2
       },
@@ -234,27 +276,81 @@ export class DatabaseManagementService {
         id: uuidv4(),
         user_id: userId,
         budget_id: budgetId,
-        name: 'Investment Portfolio',
-        account_type: 'TRACKING',
-        account_balance: 25000,
-        cleared_balance: 25000,
+        name: 'House Savings',
+        account_type: 'CASH',
+        account_balance: 0,
+        cleared_balance: 0,
         uncleared_balance: 0,
-        working_balance: 25000,
+        working_balance: 0,
         is_active: true,
         display_order: 3
+      },
+      // Credit Card Accounts
+      {
+        id: uuidv4(),
+        user_id: userId,
+        budget_id: budgetId,
+        name: 'Citi Double Cash',
+        account_type: 'CREDIT',
+        account_balance: 0,
+        cleared_balance: 0,
+        uncleared_balance: 0,
+        working_balance: 0,
+        is_active: true,
+        display_order: 4
       },
       {
         id: uuidv4(),
         user_id: userId,
         budget_id: budgetId,
-        name: 'Car Value',
-        account_type: 'TRACKING',
-        account_balance: 18000,
-        cleared_balance: 18000,
+        name: 'Apple Pay CC',
+        account_type: 'CREDIT',
+        account_balance: 0,
+        cleared_balance: 0,
         uncleared_balance: 0,
-        working_balance: 18000,
+        working_balance: 0,
         is_active: true,
-        display_order: 4
+        display_order: 5
+      },
+      {
+        id: uuidv4(),
+        user_id: userId,
+        budget_id: budgetId,
+        name: 'Prime CC',
+        account_type: 'CREDIT',
+        account_balance: 0,
+        cleared_balance: 0,
+        uncleared_balance: 0,
+        working_balance: 0,
+        is_active: true,
+        display_order: 6
+      },
+      // Tracking Accounts
+      {
+        id: uuidv4(),
+        user_id: userId,
+        budget_id: budgetId,
+        name: 'Fidelity Roth IRA',
+        account_type: 'TRACKING',
+        account_balance: 0,
+        cleared_balance: 0,
+        uncleared_balance: 0,
+        working_balance: 0,
+        is_active: true,
+        display_order: 7
+      },
+      {
+        id: uuidv4(),
+        user_id: userId,
+        budget_id: budgetId,
+        name: 'Fidelity Taxable',
+        account_type: 'TRACKING',
+        account_balance: 0,
+        cleared_balance: 0,
+        uncleared_balance: 0,
+        working_balance: 0,
+        is_active: true,
+        display_order: 8
       }
     ];
 
@@ -271,13 +367,13 @@ export class DatabaseManagementService {
   }
 
   private async createSampleCategories(supabase: SupabaseClient, userId: string, budgetId: string): Promise<{ categoryGroups: any[], categories: any[] }> {
-    // Create category groups
+    // Create category groups based on your YNAB layout
     const categoryGroupsData = [
       {
         id: uuidv4(),
         user_id: userId,
         budget_id: budgetId,
-        name: 'Monthly Bills',
+        name: 'Primary Bills',
         display_order: 1,
         is_system_group: false
       },
@@ -285,7 +381,7 @@ export class DatabaseManagementService {
         id: uuidv4(),
         user_id: userId,
         budget_id: budgetId,
-        name: 'Everyday Expenses',
+        name: 'Subscriptions',
         display_order: 2,
         is_system_group: false
       },
@@ -293,7 +389,7 @@ export class DatabaseManagementService {
         id: uuidv4(),
         user_id: userId,
         budget_id: budgetId,
-        name: 'Savings Goals',
+        name: 'Monthly Living Expenses',
         display_order: 3,
         is_system_group: false
       },
@@ -301,9 +397,18 @@ export class DatabaseManagementService {
         id: uuidv4(),
         user_id: userId,
         budget_id: budgetId,
-        name: 'Fun Money',
+        name: 'Savings',
         display_order: 4,
         is_system_group: false
+      },
+      // Credit Card Payments system group
+      {
+        id: uuidv4(),
+        user_id: userId,
+        budget_id: budgetId,
+        name: 'Credit Card Payments',
+        display_order: 5,
+        is_system_group: true
       }
     ];
 
@@ -317,37 +422,38 @@ export class DatabaseManagementService {
     }
 
     // Create categories for each group
-    const monthlyBillsGroup = categoryGroups.find(g => g.name === 'Monthly Bills');
-    const everydayGroup = categoryGroups.find(g => g.name === 'Everyday Expenses');
-    const savingsGroup = categoryGroups.find(g => g.name === 'Savings Goals');
-    const funGroup = categoryGroups.find(g => g.name === 'Fun Money');
+    const primaryBillsGroup = categoryGroups.find(g => g.name === 'Primary Bills');
+    const subscriptionsGroup = categoryGroups.find(g => g.name === 'Subscriptions');
+    const monthlyLivingGroup = categoryGroups.find(g => g.name === 'Monthly Living Expenses');
+    const savingsGroup = categoryGroups.find(g => g.name === 'Savings');
+    const creditCardPaymentsGroup = categoryGroups.find(g => g.name === 'Credit Card Payments');
 
     const categoriesData = [
-      // Monthly Bills
-      { id: uuidv4(), user_id: userId, budget_id: budgetId, category_group_id: monthlyBillsGroup.id, name: 'Rent/Mortgage', display_order: 1 },
-      { id: uuidv4(), user_id: userId, budget_id: budgetId, category_group_id: monthlyBillsGroup.id, name: 'Electric', display_order: 2 },
-      { id: uuidv4(), user_id: userId, budget_id: budgetId, category_group_id: monthlyBillsGroup.id, name: 'Water', display_order: 3 },
-      { id: uuidv4(), user_id: userId, budget_id: budgetId, category_group_id: monthlyBillsGroup.id, name: 'Internet', display_order: 4 },
-      { id: uuidv4(), user_id: userId, budget_id: budgetId, category_group_id: monthlyBillsGroup.id, name: 'Phone', display_order: 5 },
-      { id: uuidv4(), user_id: userId, budget_id: budgetId, category_group_id: monthlyBillsGroup.id, name: 'Insurance', display_order: 6 },
+      // Primary Bills
+      { id: uuidv4(), user_id: userId, budget_id: budgetId, category_group_id: primaryBillsGroup.id, name: 'Rent', display_order: 1 },
+      { id: uuidv4(), user_id: userId, budget_id: budgetId, category_group_id: primaryBillsGroup.id, name: 'Auto Insurance', display_order: 2 },
+      { id: uuidv4(), user_id: userId, budget_id: budgetId, category_group_id: primaryBillsGroup.id, name: 'Visible Phone Plan', display_order: 3 },
 
-      // Everyday Expenses
-      { id: uuidv4(), user_id: userId, budget_id: budgetId, category_group_id: everydayGroup.id, name: 'Groceries', display_order: 1 },
-      { id: uuidv4(), user_id: userId, budget_id: budgetId, category_group_id: everydayGroup.id, name: 'Gas', display_order: 2 },
-      { id: uuidv4(), user_id: userId, budget_id: budgetId, category_group_id: everydayGroup.id, name: 'Restaurants', display_order: 3 },
-      { id: uuidv4(), user_id: userId, budget_id: budgetId, category_group_id: everydayGroup.id, name: 'Clothing', display_order: 4 },
-      { id: uuidv4(), user_id: userId, budget_id: budgetId, category_group_id: everydayGroup.id, name: 'Personal Care', display_order: 5 },
+      // Subscriptions
+      { id: uuidv4(), user_id: userId, budget_id: budgetId, category_group_id: subscriptionsGroup.id, name: 'Zwift', display_order: 1 },
+      { id: uuidv4(), user_id: userId, budget_id: budgetId, category_group_id: subscriptionsGroup.id, name: 'YouTube', display_order: 2 },
+      { id: uuidv4(), user_id: userId, budget_id: budgetId, category_group_id: subscriptionsGroup.id, name: 'Augment Code', display_order: 3 },
+      { id: uuidv4(), user_id: userId, budget_id: budgetId, category_group_id: subscriptionsGroup.id, name: 'YNAB', display_order: 4 },
+      { id: uuidv4(), user_id: userId, budget_id: budgetId, category_group_id: subscriptionsGroup.id, name: 'iCloud Storage', display_order: 5 },
+      { id: uuidv4(), user_id: userId, budget_id: budgetId, category_group_id: subscriptionsGroup.id, name: 'Cursor Pro', display_order: 6 },
+      { id: uuidv4(), user_id: userId, budget_id: budgetId, category_group_id: subscriptionsGroup.id, name: 'Prime', display_order: 7 },
 
-      // Savings Goals
-      { id: uuidv4(), user_id: userId, budget_id: budgetId, category_group_id: savingsGroup.id, name: 'Emergency Fund', display_order: 1 },
-      { id: uuidv4(), user_id: userId, budget_id: budgetId, category_group_id: savingsGroup.id, name: 'Vacation', display_order: 2 },
-      { id: uuidv4(), user_id: userId, budget_id: budgetId, category_group_id: savingsGroup.id, name: 'Car Replacement', display_order: 3 },
-      { id: uuidv4(), user_id: userId, budget_id: budgetId, category_group_id: savingsGroup.id, name: 'Home Improvement', display_order: 4 },
+      // Monthly Living Expenses
+      { id: uuidv4(), user_id: userId, budget_id: budgetId, category_group_id: monthlyLivingGroup.id, name: 'House Fund', display_order: 1 },
+      { id: uuidv4(), user_id: userId, budget_id: budgetId, category_group_id: monthlyLivingGroup.id, name: 'Retirement Fund', display_order: 2 },
+      { id: uuidv4(), user_id: userId, budget_id: budgetId, category_group_id: monthlyLivingGroup.id, name: 'Groceries', display_order: 3 },
+      { id: uuidv4(), user_id: userId, budget_id: budgetId, category_group_id: monthlyLivingGroup.id, name: 'Gas', display_order: 4 },
+      { id: uuidv4(), user_id: userId, budget_id: budgetId, category_group_id: monthlyLivingGroup.id, name: 'Random Spending', display_order: 5 },
 
-      // Fun Money
-      { id: uuidv4(), user_id: userId, budget_id: budgetId, category_group_id: funGroup.id, name: 'Entertainment', display_order: 1 },
-      { id: uuidv4(), user_id: userId, budget_id: budgetId, category_group_id: funGroup.id, name: 'Hobbies', display_order: 2 },
-      { id: uuidv4(), user_id: userId, budget_id: budgetId, category_group_id: funGroup.id, name: 'Subscriptions', display_order: 3 }
+      // Savings
+      { id: uuidv4(), user_id: userId, budget_id: budgetId, category_group_id: savingsGroup.id, name: 'Four Month Emergency Fund', display_order: 1 }
+
+      // Note: Credit Card Payment Categories are automatically created by database triggers when credit accounts are created
     ];
 
     const { data: categories, error: categoryError } = await supabase
@@ -363,104 +469,31 @@ export class DatabaseManagementService {
   }
 
   private async createHistoricalData(supabase: SupabaseClient, userId: string, budgetId: string, accounts: any[], categories: any[]): Promise<void> {
-    // Create data for the last 6 months
+    // Only create category balances for the current month with all values set to 0
     const currentDate = new Date();
-    const months: Array<{ year: number; month: number; date: Date }> = [];
+    const currentYear = currentDate.getFullYear();
+    const currentMonth = currentDate.getMonth() + 1;
 
-    for (let i = 5; i >= 0; i--) {
-      const date = new Date(currentDate.getFullYear(), currentDate.getMonth() - i, 1);
-      months.push({
-        year: date.getFullYear(),
-        month: date.getMonth() + 1,
-        date: date
-      });
-    }
+    await this.createCurrentMonthBalances(supabase, userId, budgetId, currentYear, currentMonth, categories);
 
-    // Get cash accounts for transactions
-    const cashAccounts = accounts.filter(a => a.account_type === 'CASH');
-    const checkingAccount = cashAccounts.find(a => a.name === 'Checking Account');
-    const savingsAccount = cashAccounts.find(a => a.name === 'Savings Account');
-
-    // Create transactions and balances for each month
-    for (const monthData of months) {
-      await this.createMonthData(supabase, userId, budgetId, monthData, checkingAccount, savingsAccount, categories);
-    }
-
-    // Update tracking accounts with some historical changes
+    // Update tracking accounts with some historical changes for chart data
     await this.updateTrackingAccounts(supabase, userId, accounts.filter(a => a.account_type === 'TRACKING'));
   }
 
-  private async createMonthData(supabase: SupabaseClient, userId: string, budgetId: string, monthData: any, checkingAccount: any, savingsAccount: any, categories: any[]): Promise<void> {
-    const { year, month } = monthData;
-
-    // Create category balances for this month
+  private async createCurrentMonthBalances(supabase: SupabaseClient, userId: string, budgetId: string, year: number, month: number, categories: any[]): Promise<void> {
+    // Create category balances for current month with all values set to 0 (blank)
     const categoryBalances: any[] = [];
-    const transactions: any[] = [];
 
-    // Sample assignments and spending patterns
-    const monthlyAssignments = {
-      'Rent/Mortgage': 1200,
-      'Electric': 120,
-      'Water': 60,
-      'Internet': 80,
-      'Phone': 100,
-      'Insurance': 200,
-      'Groceries': 400,
-      'Gas': 150,
-      'Restaurants': 200,
-      'Clothing': 100,
-      'Personal Care': 50,
-      'Emergency Fund': 500,
-      'Vacation': 200,
-      'Car Replacement': 300,
-      'Home Improvement': 150,
-      'Entertainment': 150,
-      'Hobbies': 100,
-      'Subscriptions': 50
-    };
-
-    // Create category balances and some transactions
     for (const category of categories) {
-      const assigned = monthlyAssignments[category.name] || 0;
-
-      // Vary assignments slightly for realism
-      const variation = Math.random() * 0.2 - 0.1; // ±10%
-      const finalAssigned = Math.round(assigned * (1 + variation));
-
-      // Create some spending (70-90% of assigned amount for most categories)
-      let activity = 0;
-      if (finalAssigned > 0 && Math.random() > 0.1) { // 90% chance of spending
-        const spendingRate = 0.7 + Math.random() * 0.2; // 70-90%
-        activity = -Math.round(finalAssigned * spendingRate);
-
-        // Create a transaction for this spending
-        if (activity < 0) {
-          transactions.push({
-            id: uuidv4(),
-            user_id: userId,
-            account_id: checkingAccount.id,
-            date: `${year}-${month.toString().padStart(2, '0')}-${Math.floor(Math.random() * 28) + 1}`,
-            amount: activity,
-            payee: this.getRandomPayee(category.name),
-            memo: `${category.name} expense`,
-            category_id: category.id,
-            is_cleared: true,
-            is_reconciled: false
-          });
-        }
-      }
-
-      const available = finalAssigned + activity;
-
       categoryBalances.push({
         category_id: category.id,
         budget_id: budgetId,
         user_id: userId,
         year: year,
         month: month,
-        assigned: finalAssigned,
-        activity: activity,
-        available: available
+        assigned: 0,
+        activity: 0,
+        available: 0
       });
     }
 
@@ -474,35 +507,35 @@ export class DatabaseManagementService {
         throw new Error(`Failed to create category balances for ${year}-${month}: ${balanceError.message}`);
       }
     }
-
-    // Insert transactions
-    if (transactions.length > 0) {
-      const { error: transactionError } = await supabase
-        .from('transactions')
-        .insert(transactions);
-
-      if (transactionError) {
-        throw new Error(`Failed to create transactions for ${year}-${month}: ${transactionError.message}`);
-      }
-    }
   }
 
   private getRandomPayee(categoryName: string): string {
     const payeeMap: { [key: string]: string[] } = {
-      'Rent/Mortgage': ['Property Management Co', 'Landlord', 'Mortgage Company'],
-      'Electric': ['Electric Company', 'Power Corp', 'Energy Provider'],
-      'Water': ['Water Department', 'City Water', 'Water Utility'],
-      'Internet': ['Internet Provider', 'Cable Company', 'ISP'],
-      'Phone': ['Phone Company', 'Mobile Carrier', 'Telecom'],
-      'Insurance': ['Insurance Company', 'Auto Insurance', 'Health Insurance'],
-      'Groceries': ['Grocery Store', 'Supermarket', 'Food Market', 'Walmart', 'Target'],
-      'Gas': ['Gas Station', 'Shell', 'Exxon', 'BP'],
-      'Restaurants': ['Restaurant', 'Fast Food', 'Cafe', 'Pizza Place', 'Diner'],
-      'Clothing': ['Clothing Store', 'Department Store', 'Online Retailer'],
-      'Personal Care': ['Pharmacy', 'Salon', 'Barber Shop', 'Health Store'],
-      'Entertainment': ['Movie Theater', 'Concert Venue', 'Streaming Service'],
-      'Hobbies': ['Hobby Shop', 'Sports Store', 'Craft Store'],
-      'Subscriptions': ['Netflix', 'Spotify', 'Amazon Prime', 'Gym Membership']
+      // Primary Bills
+      'Rent': ['Property Management Co', 'Landlord', 'Rent Payment'],
+      'Auto Insurance': ['State Farm', 'Geico', 'Progressive', 'Allstate'],
+      'Visible Phone Plan': ['Visible', 'Verizon Visible'],
+
+      // Subscriptions
+      'Zwift': ['Zwift'],
+      'YouTube': ['YouTube Premium', 'Google'],
+      'Augment Code': ['Augment Code'],
+      'YNAB': ['YNAB', 'You Need A Budget'],
+      'iCloud Storage': ['Apple', 'iCloud'],
+      'Cursor Pro': ['Cursor'],
+      'Prime': ['Amazon Prime', 'Amazon'],
+
+      // Monthly Living Expenses
+      'House Fund': ['House Fund Transfer', 'Savings Transfer'],
+      'Retirement Fund': ['Fidelity', 'Retirement Transfer', '401k Contribution'],
+      'Groceries': ['Kroger', 'Walmart', 'Target', 'Whole Foods', 'Costco'],
+      'Gas': ['Shell', 'Exxon', 'BP', 'Chevron', 'Speedway'],
+      'Random Spending': ['Amazon', 'Target', 'Walmart', 'Various Stores'],
+
+      // Savings
+      'Four Month Emergency Fund': ['Emergency Fund Transfer', 'Savings Transfer'],
+
+      // Note: Credit Card Payment categories are system-managed and don't need payees
     };
 
     const payees = payeeMap[categoryName] || ['Generic Store'];
@@ -527,9 +560,9 @@ export class DatabaseManagementService {
     }
 
     for (const account of trackingAccounts) {
-      if (account.name === 'Investment Portfolio') {
-        // Create realistic investment portfolio changes with market volatility
-        let runningBalance = 25000; // Starting balance
+      if (account.name === 'Fidelity Roth IRA') {
+        // Create realistic Roth IRA changes with market volatility
+        let runningBalance = 45000; // Starting balance
 
         for (let i = 0; i < months.length; i++) {
           const monthData = months[i];
@@ -593,68 +626,70 @@ export class DatabaseManagementService {
             runningBalance += change.amount;
           }
         }
-      } else if (account.name === 'Car Value') {
-        // Create realistic car depreciation with some maintenance/improvements
-        let carValue = 18000; // Starting value
+      } else if (account.name === 'Fidelity Taxable') {
+        // Create realistic taxable investment account changes
+        let accountValue = 25000; // Starting value
 
         for (let i = 0; i < months.length; i++) {
           const monthData = months[i];
           const dateStr = `${monthData.year}-${monthData.month.toString().padStart(2, '0')}`;
 
-          // Regular monthly depreciation (varies by season and mileage)
-          let monthlyDepreciation = -Math.floor(Math.random() * 200) - 300; // $300-500 per month
+          // Create similar investment patterns but for taxable account
+          let monthlyChanges: Array<{ amount: number; memo: string; day: number }> = [];
 
-          // Seasonal adjustments
-          if (monthData.month >= 11 || monthData.month <= 2) {
-            // Winter months - higher depreciation due to weather
-            monthlyDepreciation -= Math.floor(Math.random() * 100) + 50;
+          if (i < 6) {
+            // First 6 months: Steady growth with dividends
+            monthlyChanges = [
+              { amount: Math.floor(Math.random() * 800) + 400, memo: 'Market gains', day: 5 },
+              { amount: Math.floor(Math.random() * 300) + 100, memo: 'Dividend payment', day: 15 },
+              { amount: Math.floor(Math.random() * 200) + 100, memo: 'Stock appreciation', day: 25 }
+            ];
+
+            // Occasional correction
+            if (Math.random() < 0.2) {
+              monthlyChanges.push({ amount: -(Math.floor(Math.random() * 600) + 300), memo: 'Market correction', day: 20 });
+            }
+          } else if (i < 12) {
+            // Next 6 months: More volatile
+            monthlyChanges = [
+              { amount: Math.floor(Math.random() * 500) - 250, memo: 'Market volatility', day: 8 },
+              { amount: Math.floor(Math.random() * 300) + 100, memo: 'Dividend payment', day: 15 },
+              { amount: Math.floor(Math.random() * 600) - 300, memo: 'Portfolio rebalancing', day: 22 }
+            ];
+
+            // Higher chance of losses
+            if (Math.random() < 0.4) {
+              monthlyChanges.push({ amount: -(Math.floor(Math.random() * 800) + 400), memo: 'Market decline', day: 12 });
+            }
+          } else {
+            // Last 6 months: Recovery and growth
+            monthlyChanges = [
+              { amount: Math.floor(Math.random() * 1000) + 500, memo: 'Recovery gains', day: 7 },
+              { amount: Math.floor(Math.random() * 300) + 150, memo: 'Dividend payment', day: 15 },
+              { amount: Math.floor(Math.random() * 600) + 200, memo: 'Strong performance', day: 28 }
+            ];
+
+            // Add some additional contributions
+            if (Math.random() < 0.3) {
+              monthlyChanges.push({ amount: Math.floor(Math.random() * 800) + 400, memo: 'Additional investment', day: 1 });
+            }
           }
 
-          transactions.push({
-            id: uuidv4(),
-            user_id: userId,
-            account_id: account.id,
-            date: `${dateStr}-${(Math.floor(Math.random() * 28) + 1).toString().padStart(2, '0')}`,
-            amount: monthlyDepreciation,
-            payee: 'Depreciation',
-            memo: 'Monthly depreciation',
-            category_id: null,
-            is_cleared: true,
-            is_reconciled: false
-          });
-
-          // Occasional maintenance that adds value
-          if (Math.random() < 0.15) { // 15% chance per month
-            const maintenanceValue = Math.floor(Math.random() * 800) + 200;
+          // Add all changes for this month
+          for (const change of monthlyChanges) {
             transactions.push({
               id: uuidv4(),
               user_id: userId,
               account_id: account.id,
-              date: `${dateStr}-${(Math.floor(Math.random() * 28) + 1).toString().padStart(2, '0')}`,
-              amount: maintenanceValue,
-              payee: 'Auto Shop',
-              memo: 'Maintenance/Repairs',
+              date: `${dateStr}-${change.day.toString().padStart(2, '0')}`,
+              amount: change.amount,
+              payee: 'Fidelity',
+              memo: change.memo,
               category_id: null,
               is_cleared: true,
               is_reconciled: false
             });
-          }
-
-          // Major service or upgrade occasionally
-          if (Math.random() < 0.05) { // 5% chance per month
-            const upgradeValue = Math.floor(Math.random() * 1500) + 500;
-            transactions.push({
-              id: uuidv4(),
-              user_id: userId,
-              account_id: account.id,
-              date: `${dateStr}-${(Math.floor(Math.random() * 28) + 1).toString().padStart(2, '0')}`,
-              amount: upgradeValue,
-              payee: 'Auto Dealer',
-              memo: 'Major service/upgrade',
-              category_id: null,
-              is_cleared: true,
-              is_reconciled: false
-            });
+            accountValue += change.amount;
           }
         }
       }
@@ -673,49 +708,53 @@ export class DatabaseManagementService {
   }
 
   private async createSampleAutoAssignConfigurations(supabase: SupabaseClient, userId: string, budgetId: string, categories: any[]): Promise<void> {
-    // Create 5 different auto-assign configurations with various combinations of categories
+    // Create auto-assign configurations based on your YNAB layout
     const configurations = [
       {
-        name: 'Monthly Essentials',
+        name: 'Primary Bills',
         items: [
-          { category_name: 'Rent/Mortgage', amount: 1200 },
-          { category_name: 'Electric', amount: 120 },
-          { category_name: 'Water', amount: 60 },
-          { category_name: 'Internet', amount: 80 },
-          { category_name: 'Phone', amount: 100 }
+          { category_name: 'Rent', amount: 1800 },
+          { category_name: 'Auto Insurance', amount: 150 },
+          { category_name: 'Visible Phone Plan', amount: 40 }
         ]
       },
       {
-        name: 'Food & Transportation',
+        name: 'All Subscriptions',
         items: [
-          { category_name: 'Groceries', amount: 400 },
-          { category_name: 'Gas', amount: 150 },
-          { category_name: 'Restaurants', amount: 200 }
+          { category_name: 'Zwift', amount: 15 },
+          { category_name: 'YouTube', amount: 12 },
+          { category_name: 'Augment Code', amount: 50 },
+          { category_name: 'YNAB', amount: 14 },
+          { category_name: 'iCloud Storage', amount: 3 },
+          { category_name: 'Cursor Pro', amount: 20 },
+          { category_name: 'Prime', amount: 15 }
         ]
       },
       {
-        name: 'Savings Goals',
+        name: 'Living Expenses',
         items: [
-          { category_name: 'Emergency Fund', amount: 500 },
-          { category_name: 'Vacation', amount: 200 },
-          { category_name: 'Car Replacement', amount: 300 }
+          { category_name: 'Groceries', amount: 600 },
+          { category_name: 'Gas', amount: 200 },
+          { category_name: 'Random Spending', amount: 300 }
         ]
       },
       {
-        name: 'Personal Care & Fun',
+        name: 'Savings & Investments',
         items: [
-          { category_name: 'Personal Care', amount: 50 },
-          { category_name: 'Entertainment', amount: 150 },
-          { category_name: 'Hobbies', amount: 100 },
-          { category_name: 'Subscriptions', amount: 50 }
+          { category_name: 'House Fund', amount: 500 },
+          { category_name: 'Retirement Fund', amount: 1000 },
+          { category_name: 'Four Month Emergency Fund', amount: 800 }
         ]
       },
       {
-        name: 'Insurance & Protection',
+        name: 'Complete Monthly Budget',
         items: [
-          { category_name: 'Insurance', amount: 200 },
-          { category_name: 'Emergency Fund', amount: 300 },
-          { category_name: 'Home Improvement', amount: 150 }
+          { category_name: 'Rent', amount: 1800 },
+          { category_name: 'Auto Insurance', amount: 150 },
+          { category_name: 'Groceries', amount: 600 },
+          { category_name: 'Gas', amount: 200 },
+          { category_name: 'House Fund', amount: 500 },
+          { category_name: 'Retirement Fund', amount: 1000 }
         ]
       }
     ];
@@ -773,8 +812,7 @@ export class DatabaseManagementService {
     // Add the current user as participant to all goals
     await this.createGoalParticipants(supabase, sharedGoals, currentUserProfile, budgetId, categories);
 
-    // Create category balances for completed goals to ensure they show as completed
-    await this.createCompletedGoalBalances(supabase, sharedGoals, budgetId);
+    // Note: Not creating completed goal balances since we want all category balances to remain at 0
   }
 
   private async ensureUserProfile(supabase: SupabaseClient, userId: string): Promise<any> {
@@ -928,66 +966,7 @@ export class DatabaseManagementService {
 
 
 
-  private async createCompletedGoalBalances(supabase: SupabaseClient, sharedGoals: any[], budgetId: string): Promise<void> {
-    const currentDate = new Date();
-    const currentYear = currentDate.getFullYear();
-    const currentMonth = currentDate.getMonth() + 1;
 
-    // Find completed goals and their participants
-    const completedGoals = sharedGoals.filter(goal => goal.status === 'COMPLETED');
-
-    for (const goal of completedGoals) {
-      // Get the participant for this goal
-      const { data: participants, error: participantError } = await supabase
-        .from('goal_participants')
-        .select('category_id')
-        .eq('goal_id', goal.id);
-
-      if (participantError || !participants || participants.length === 0) {
-        continue;
-      }
-
-      const participant = participants[0];
-      if (!participant.category_id) {
-        continue;
-      }
-
-      // Check if category balance already exists for current month
-      const { data: existingBalance } = await supabase
-        .from('category_balances')
-        .select('id')
-        .eq('category_id', participant.category_id)
-        .eq('budget_id', budgetId)
-        .eq('year', currentYear)
-        .eq('month', currentMonth)
-        .single();
-
-      if (existingBalance) {
-        // Update existing balance to have enough for the goal
-        await supabase
-          .from('category_balances')
-          .update({
-            available: goal.target_amount,
-            assigned: goal.target_amount
-          })
-          .eq('id', existingBalance.id);
-      } else {
-        // Create new balance with enough for the goal
-        await supabase
-          .from('category_balances')
-          .insert([{
-            id: uuidv4(),
-            category_id: participant.category_id,
-            budget_id: budgetId,
-            year: currentYear,
-            month: currentMonth,
-            assigned: goal.target_amount,
-            activity: 0,
-            available: goal.target_amount
-          }]);
-      }
-    }
-  }
 
   private getRandomContribution(targetAmount: number): number {
     // Calculate a reasonable monthly contribution based on target amount
