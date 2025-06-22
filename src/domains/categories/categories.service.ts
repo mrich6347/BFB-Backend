@@ -2,12 +2,14 @@ import { Injectable } from '@nestjs/common';
 import { SupabaseService } from '../../supabase/supabase.service';
 import { CreateCategoryDto, UpdateCategoryDto, CategoryResponse, ReorderCategoriesDto, CategoryWithReadyToAssignResponse, CategoryUpdateWithAffectedCategoriesResponse } from './dto/category.dto';
 import { ReadyToAssignService } from '../ready-to-assign/ready-to-assign.service';
+import { CreditCardDebtService } from '../credit-card-debt/credit-card-debt.service';
 
 @Injectable()
 export class CategoriesService {
   constructor(
     private readonly supabaseService: SupabaseService,
-    private readonly readyToAssignService: ReadyToAssignService
+    private readonly readyToAssignService: ReadyToAssignService,
+    private readonly creditCardDebtService: CreditCardDebtService
   ) {}
 
   async create(createCategoryDto: CreateCategoryDto, userId: string, authToken: string): Promise<CategoryWithReadyToAssignResponse> {
@@ -257,7 +259,7 @@ export class CategoriesService {
             .single();
 
           if (categoryData) {
-            await this.handleCreditCardLogicForAssignments(
+            await this.creditCardDebtService.handleCreditCardLogicForAssignments(
               [{ category_id: id, amount: assignedDifference }],
               categoryData.budget_id,
               userId,
@@ -688,7 +690,7 @@ export class CategoriesService {
           .single();
 
         if (categoryData) {
-          await this.handleCreditCardLogicForAssignments(appliedCategories, categoryData.budget_id, userId, authToken, year, month);
+          await this.creditCardDebtService.handleCreditCardLogicForAssignments(appliedCategories, categoryData.budget_id, userId, authToken, year, month);
         }
       }
 
@@ -817,7 +819,7 @@ export class CategoriesService {
         .single();
 
       if (categoryData) {
-        await this.handleCreditCardLogicForAssignments(appliedCategories, categoryData.budget_id, userId, authToken, year, month);
+        await this.creditCardDebtService.handleCreditCardLogicForAssignments(appliedCategories, categoryData.budget_id, userId, authToken, year, month);
       }
     }
 
@@ -1216,7 +1218,7 @@ export class CategoriesService {
     }
 
     // Handle YNAB-style credit card logic after successful assignment
-    await this.handleCreditCardLogicForAssignments(
+    await this.creditCardDebtService.handleCreditCardLogicForAssignments(
       [{ category_id: destinationCategoryId, amount: amount }],
       category.budget_id,
       userId,
@@ -1241,153 +1243,27 @@ export class CategoriesService {
   }
 
   /**
-   * Handle YNAB-style automatic money movement for credit card assignments
-   * When money is assigned to a category that has existing credit card debt:
-   * 1. Check for uncovered credit card debt for this category
-   * 2. Automatically move assigned money to corresponding payment categories
-   * 3. Update debt tracking records
+   * Get category balance for a specific category, year, and month
    */
-  private async handleCreditCardLogicForAssignments(
-    appliedCategories: { category_id: string; amount: number }[],
-    budgetId: string,
-    userId: string,
-    authToken: string,
-    year: number,
-    month: number
-  ): Promise<void> {
+  async getCategoryBalance(categoryId: string, budgetId: string, userId: string, authToken: string): Promise<any> {
     const supabase = this.supabaseService.getAuthenticatedClient(authToken);
+    const now = new Date();
+    const currentYear = now.getFullYear();
+    const currentMonth = now.getMonth() + 1;
 
-    console.log(`🔍 YNAB Credit Card Assignment Logic: Checking ${appliedCategories.length} categories for credit card debt`);
+    const { data: balance, error } = await supabase
+      .from('category_balances')
+      .select('assigned, activity, available')
+      .eq('category_id', categoryId)
+      .eq('user_id', userId)
+      .eq('year', currentYear)
+      .eq('month', currentMonth)
+      .single();
 
-    try {
-      for (const appliedCategory of appliedCategories) {
-        console.log(`🔍 Checking category ${appliedCategory.category_id} for credit card debt (assigned: $${appliedCategory.amount})`);
-
-        // Find uncovered credit card debt for this category
-        const { data: debtRecords, error: debtError } = await supabase
-          .from('credit_card_debt_tracking')
-          .select(`
-            id,
-            debt_amount,
-            covered_amount,
-            credit_card_account_id,
-            accounts!credit_card_debt_tracking_credit_card_account_id_fkey(name, account_type)
-          `)
-          .eq('original_category_id', appliedCategory.category_id)
-          .eq('user_id', userId)
-          .eq('budget_id', budgetId);
-
-        if (debtError) {
-          console.error('Error fetching debt records:', debtError);
-          continue;
-        }
-
-        console.log(`🔍 Found ${debtRecords?.length || 0} debt records for category ${appliedCategory.category_id}`);
-
-        if (!debtRecords || debtRecords.length === 0) {
-          // No credit card debt for this category
-          console.log(`ℹ️ No credit card debt found for category ${appliedCategory.category_id}`);
-          continue;
-        }
-
-        // Process each debt record for this category
-        for (const debtRecord of debtRecords) {
-          const uncoveredAmount = debtRecord.debt_amount - debtRecord.covered_amount;
-
-          if (uncoveredAmount <= 0) {
-            // This debt is already fully covered
-            continue;
-          }
-
-          // Calculate how much of the assigned money should go to this debt
-          const amountToMove = Math.min(appliedCategory.amount, uncoveredAmount);
-
-          if (amountToMove <= 0) {
-            continue;
-          }
-
-          console.log(`💳 YNAB Credit Card Assignment Logic: Moving $${amountToMove} from category to payment category for debt ${debtRecord.id}`);
-
-          // Find the payment category for this credit card
-          const account = Array.isArray(debtRecord.accounts) ? debtRecord.accounts[0] : debtRecord.accounts;
-          const paymentCategoryName = `${account.name} Payment`;
-          const { data: paymentCategory, error: paymentCategoryError } = await supabase
-            .from('categories')
-            .select('id, name')
-            .eq('name', paymentCategoryName)
-            .eq('budget_id', budgetId)
-            .eq('user_id', userId)
-            .single();
-
-          if (paymentCategoryError) {
-            console.error(`Payment category '${paymentCategoryName}' not found:`, paymentCategoryError);
-            continue;
-          }
-
-          // Move money from spending category to payment category
-          // Note: We don't need to modify the spending category's balance here
-          // The assignment already happened in pullFromReadyToAssign, and the credit card logic
-          // is just moving the coverage to the payment category without affecting the spending category
-
-          // 2. Add activity to the payment category (represents automatic coverage)
-          const { data: paymentBalance } = await supabase
-            .from('category_balances')
-            .select('activity, available')
-            .eq('category_id', paymentCategory.id)
-            .eq('user_id', userId)
-            .eq('year', year)
-            .eq('month', month)
-            .single();
-
-          if (paymentBalance) {
-            // Update existing payment category balance
-            await supabase
-              .from('category_balances')
-              .update({
-                activity: (paymentBalance.activity || 0) + amountToMove,
-                available: (paymentBalance.available || 0) + amountToMove
-              })
-              .eq('category_id', paymentCategory.id)
-              .eq('user_id', userId)
-              .eq('year', year)
-              .eq('month', month);
-          } else {
-            // Create new payment category balance
-            await supabase
-              .from('category_balances')
-              .insert({
-                category_id: paymentCategory.id,
-                budget_id: budgetId,
-                user_id: userId,
-                year: year,
-                month: month,
-                assigned: 0,
-                activity: amountToMove,
-                available: amountToMove
-              });
-          }
-
-          // 3. Update debt tracking record to reflect the new covered amount
-          await supabase
-            .from('credit_card_debt_tracking')
-            .update({
-              covered_amount: debtRecord.covered_amount + amountToMove
-            })
-            .eq('id', debtRecord.id);
-
-          console.log(`✅ YNAB Credit Card Assignment Logic: Moved $${amountToMove} to '${paymentCategoryName}', updated debt coverage`);
-
-          // Reduce the remaining amount to assign for this category
-          appliedCategory.amount -= amountToMove;
-
-          if (appliedCategory.amount <= 0) {
-            break; // No more money to move for this category
-          }
-        }
-      }
-    } catch (error) {
-      console.error('Error handling credit card logic for assignments:', error);
-      // Don't throw - this is supplementary logic, main assignment should still succeed
+    if (error && error.code !== 'PGRST116') {
+      throw new Error(error.message);
     }
+
+    return balance;
   }
 }
