@@ -1,4 +1,6 @@
 import { IsNotEmpty, IsOptional, IsString, IsUUID, IsInt, IsNumber, IsBoolean } from 'class-validator';
+import { CategoryBalanceResponse } from '../../category-balances/dto/category-balance.dto';
+
 
 export class CreateCategoryDto {
   @IsString()
@@ -112,7 +114,6 @@ export class CategoryResponse {
   updated_at: Date;
 }
 
-import { CategoryBalanceResponse } from '../../category-balances/dto/category-balance.dto';
 
 export class CategoryWithReadyToAssignResponse {
   category: CategoryResponse;
