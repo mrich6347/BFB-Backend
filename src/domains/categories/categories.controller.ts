@@ -1,5 +1,6 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards, Req, Query, ParseUUIDPipe, ParseIntPipe } from '@nestjs/common';
-import { CategoriesService } from './categories.service';
+import { Controller, Get, Post, Body, Patch, Param, UseGuards, Req, Query, ParseUUIDPipe, ParseIntPipe } from '@nestjs/common';
+import { CategoryReadService } from './services/read/category-read.service';
+import { CategoryWriteService } from './services/write/category-write.service';
 import { CreateCategoryDto, UpdateCategoryDto, CategoryResponse, ReorderCategoriesDto, MoveMoneyDto, PullFromReadyToAssignDto, CategoryWithReadyToAssignResponse, CategoryUpdateWithAffectedCategoriesResponse, UnhideCategoryDto } from './dto/category.dto';
 import { SupabaseAuthGuard } from '../../guards/auth.guard';
 import { AuthService } from '../../configurations/auth/auth.service';
@@ -8,14 +9,15 @@ import { AuthService } from '../../configurations/auth/auth.service';
 @UseGuards(SupabaseAuthGuard)
 export class CategoriesController {
   constructor(
-    private readonly categoriesService: CategoriesService,
+    private readonly categoryReadService: CategoryReadService,
+    private readonly categoryWriteService: CategoryWriteService,
     private readonly authService: AuthService
   ) {}
 
   @Post()
   async create(@Body() createCategoryDto: CreateCategoryDto, @Req() req: any): Promise<CategoryWithReadyToAssignResponse> {
     const authToken = this.authService.getAuthToken(req);
-    return this.categoriesService.create(createCategoryDto, req.user.id, authToken);
+    return this.categoryWriteService.create(createCategoryDto, req.user.id, authToken);
   }
 
   @Get()
@@ -26,7 +28,7 @@ export class CategoriesController {
     @Req() req: any
   ): Promise<CategoryResponse[]> {
     const authToken = this.authService.getAuthToken(req);
-    return this.categoriesService.findAll(categoryGroupId, req.user.id, authToken, year, month);
+    return this.categoryReadService.findAll(categoryGroupId, req.user.id, authToken, year, month);
   }
 
   @Get('budget/:budgetId')
@@ -37,7 +39,7 @@ export class CategoriesController {
     @Req() req: any
   ): Promise<CategoryResponse[]> {
     const authToken = this.authService.getAuthToken(req);
-    return this.categoriesService.findAllByBudget(budgetId, req.user.id, authToken, year, month);
+    return this.categoryReadService.findAllByBudget(budgetId, req.user.id, authToken, year, month);
   }
 
   @Patch(':id')
@@ -49,13 +51,13 @@ export class CategoriesController {
     @Query('month', new ParseIntPipe({ optional: true })) month?: number
   ): Promise<CategoryUpdateWithAffectedCategoriesResponse> {
     const authToken = this.authService.getAuthToken(req);
-    return this.categoriesService.updateWithAffectedCategories(id, updateCategoryDto, req.user.id, authToken, year, month);
+    return this.categoryWriteService.updateWithAffectedCategories(id, updateCategoryDto, req.user.id, authToken, year, month);
   }
 
   @Patch(':id/hide')
   async hide(@Param('id', new ParseUUIDPipe()) id: string, @Req() req: any): Promise<{ readyToAssign: number }> {
     const authToken = this.authService.getAuthToken(req);
-    return this.categoriesService.hide(id, req.user.id, authToken);
+    return this.categoryWriteService.hide(id, req.user.id, authToken);
   }
 
   @Patch(':id/unhide')
@@ -65,19 +67,19 @@ export class CategoriesController {
     @Req() req: any
   ): Promise<{ readyToAssign: number }> {
     const authToken = this.authService.getAuthToken(req);
-    return this.categoriesService.unhide(id, req.user.id, authToken, unhideCategoryDto.targetGroupId);
+    return this.categoryWriteService.unhide(id, req.user.id, authToken, unhideCategoryDto.targetGroupId);
   }
 
   @Post('reorder')
   async reorder(@Body() reorderDto: ReorderCategoriesDto, @Req() req: any): Promise<void> {
     const authToken = this.authService.getAuthToken(req);
-    return this.categoriesService.reorder(reorderDto, req.user.id, authToken);
+    return this.categoryWriteService.reorder(reorderDto, req.user.id, authToken);
   }
 
   @Post('move-money')
   async moveMoney(@Body() moveMoneyDto: MoveMoneyDto, @Req() req: any): Promise<{ readyToAssign: number; sourceCategoryBalance: any; destinationCategoryBalance: any }> {
     const authToken = this.authService.getAuthToken(req);
-    return this.categoriesService.moveMoney(
+    return this.categoryWriteService.moveMoney(
       moveMoneyDto.sourceCategoryId,
       moveMoneyDto.destinationCategoryId,
       moveMoneyDto.amount,
@@ -91,7 +93,7 @@ export class CategoriesController {
   @Post('move-money-to-ready-to-assign')
   async moveMoneyToReadyToAssign(@Body() moveMoneyDto: Omit<MoveMoneyDto, 'destinationCategoryId'>, @Req() req: any): Promise<CategoryUpdateWithAffectedCategoriesResponse> {
     const authToken = this.authService.getAuthToken(req);
-    return this.categoriesService.moveMoneyToReadyToAssign(
+    return this.categoryWriteService.moveMoneyToReadyToAssign(
       moveMoneyDto.sourceCategoryId,
       moveMoneyDto.amount,
       moveMoneyDto.year,
@@ -104,7 +106,7 @@ export class CategoriesController {
   @Post('pull-from-ready-to-assign')
   async pullFromReadyToAssign(@Body() pullFromReadyToAssignDto: PullFromReadyToAssignDto, @Req() req: any): Promise<CategoryUpdateWithAffectedCategoriesResponse> {
     const authToken = this.authService.getAuthToken(req);
-    return this.categoriesService.pullFromReadyToAssign(
+    return this.categoryWriteService.pullFromReadyToAssign(
       pullFromReadyToAssignDto.destinationCategoryId,
       pullFromReadyToAssignDto.amount,
       pullFromReadyToAssignDto.year,

@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { SupabaseService } from '../../supabase/supabase.service';
-import { CategoriesService } from '../categories/categories.service';
+import { CategoryWriteService } from '../categories/services/write/category-write.service';
 import { ReadyToAssignService } from '../ready-to-assign/ready-to-assign.service';
 import {
   CreateAutoAssignConfigurationDto,
@@ -16,7 +16,7 @@ import { UserDateContextUtils, WithUserDateContext } from '../../common/interfac
 export class AutoAssignService {
   constructor(
     private readonly supabaseService: SupabaseService,
-    private readonly categoriesService: CategoriesService,
+    private readonly categoryWriteService: CategoryWriteService,
     private readonly readyToAssignService: ReadyToAssignService
   ) {}
 
@@ -219,7 +219,7 @@ export class AutoAssignService {
     const { year, month } = UserDateContextUtils.getCurrentUserDate(userDateContext);
 
     // Use batch update for better performance
-    const result = await this.categoriesService.batchUpdateAssigned(
+    const result = await this.categoryWriteService.batchUpdateAssigned(
       configItems.map(item => ({
         category_id: item.category_id,
         amount: item.amount

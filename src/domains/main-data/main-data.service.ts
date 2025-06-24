@@ -3,7 +3,7 @@ import { BudgetsService } from '../budgets/budgets.service';
 import { MainDataResponse } from './DTO/mainData.dto';
 import { AccountsService } from '../accounts/accounts.service';
 import { CategoryGroupsService } from '../category-groups/category-groups.service';
-import { CategoriesService } from '../categories/categories.service';
+import { CategoryReadService } from '../categories/services/read/category-read.service';
 import { CategoryBalancesService } from '../category-balances/category-balances.service';
 import { ReadyToAssignService } from '../ready-to-assign/ready-to-assign.service';
 import { TransactionsService } from '../transactions/transactions.service';
@@ -19,7 +19,7 @@ export class MainDataService {
         private readonly budgetsService: BudgetsService,
         private readonly accountsService: AccountsService,
         private readonly categoryGroupsService: CategoryGroupsService,
-        private readonly categoriesService: CategoriesService,
+        private readonly categoryReadService: CategoryReadService,
         private readonly categoryBalancesService: CategoryBalancesService,
         private readonly readyToAssignService: ReadyToAssignService,
         private readonly transactionsService: TransactionsService,
@@ -37,7 +37,7 @@ export class MainDataService {
             this.budgetsService.findOne(budgetId, userId, authToken),
             this.accountsService.findAll(userId, authToken, budgetId),
             this.categoryGroupsService.findAll(budgetId, userId, authToken),
-            this.categoriesService.findAllByBudgetWithoutBalances(budgetId, userId, authToken),
+            this.categoryReadService.findAllByBudgetWithoutBalances(budgetId, userId, authToken),
             this.categoryBalancesService.findAllByBudget(budgetId, userId, authToken, userDateContext), // Now only returns current month
             this.transactionsService.findAllByBudget(budgetId, userId, authToken),
             this.readyToAssignService.calculateReadyToAssign(budgetId, userId, authToken),
@@ -102,7 +102,7 @@ export class MainDataService {
         );
 
         // Get all categories for this budget
-        const categories = await this.categoriesService.findAllByBudgetWithoutBalances(budgetId, userId, authToken);
+        const categories = await this.categoryReadService.findAllByBudgetWithoutBalances(budgetId, userId, authToken);
 
         // Create current month balances
         const newBalances = categories.map(category => {

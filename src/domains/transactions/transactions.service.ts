@@ -3,7 +3,7 @@ import { SupabaseClient } from '@supabase/supabase-js';
 import { SupabaseService } from '../../supabase/supabase.service';
 import { CreateTransactionDto, UpdateTransactionDto, TransactionResponse, TransactionWithAccountsResponse, TransactionDeleteResponse } from './dto/transaction.dto';
 import { CategoryBalancesService } from '../category-balances/category-balances.service';
-import { CategoriesService } from '../categories/categories.service';
+import { CategoryReadService } from '../categories/services/read/category-read.service';
 import { UserDateContextUtils } from '../../common/interfaces/user-date-context.interface';
 import { CreditCardDebtService } from '../credit-card-debt/credit-card-debt.service';
 import { v4 as uuidv4 } from 'uuid';
@@ -15,7 +15,7 @@ export class TransactionsService {
   constructor(
     private supabaseService: SupabaseService,
     private categoryBalancesService: CategoryBalancesService,
-    private categoriesService: CategoriesService,
+    private categoryReadService: CategoryReadService,
     private creditCardDebtService: CreditCardDebtService
   ) {
     this.supabase = this.supabaseService.client;
@@ -320,7 +320,7 @@ export class TransactionsService {
             updateTransactionDto.userYear,
             updateTransactionDto.userMonth,
             this.updateCategoryActivity.bind(this),
-            this.categoriesService.getCategoryBalance.bind(this.categoriesService)
+            this.categoryReadService.getCategoryBalance.bind(this.categoryReadService)
           );
         }
 

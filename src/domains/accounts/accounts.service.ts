@@ -5,7 +5,7 @@ import { SupabaseClient } from '@supabase/supabase-js';
 import { ReadyToAssignService } from '../ready-to-assign/ready-to-assign.service';
 import { TransactionsService } from '../transactions/transactions.service';
 import { TransactionResponse } from '../transactions/dto/transaction.dto';
-import { CategoriesService } from '../categories/categories.service';
+import { CategoryWriteService } from '../categories/services/write/category-write.service';
 
 @Injectable()
 export class AccountsService {
@@ -15,7 +15,7 @@ export class AccountsService {
     private supabaseService: SupabaseService,
     private readyToAssignService: ReadyToAssignService,
     private transactionsService: TransactionsService,
-    private categoriesService: CategoriesService
+    private categoryWriteService: CategoryWriteService
   ) {
     this.supabase = this.supabaseService.client;
   }
@@ -510,7 +510,7 @@ export class AccountsService {
 
     try {
       // Use the categories service to hide the payment category
-      await this.categoriesService.hide(paymentCategory.id, userId, authToken);
+      await this.categoryWriteService.hide(paymentCategory.id, userId, authToken);
       console.log(`Moved payment category '${paymentCategoryName}' to Hidden Categories`);
     } catch (error) {
       console.error(`Failed to move payment category '${paymentCategoryName}' to Hidden Categories:`, error);

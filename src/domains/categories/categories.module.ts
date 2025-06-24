@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
-import { CategoriesService } from './categories.service';
+import { CategoryReadService } from './services/read/category-read.service';
+import { CategoryWriteService } from './services/write/category-write.service';
 import { CategoriesController } from './categories.controller';
 import { AuthModule } from '../../configurations/auth/auth.module';
 import { ReadyToAssignModule } from '../ready-to-assign/ready-to-assign.module';
@@ -7,8 +8,8 @@ import { CreditCardDebtModule } from '../credit-card-debt/credit-card-debt.modul
 
 @Module({
   controllers: [CategoriesController],
-  providers: [CategoriesService],
-  exports: [CategoriesService],
+  providers: [CategoryReadService, CategoryWriteService],
+  exports: [CategoryReadService, CategoryWriteService],
   imports: [AuthModule, ReadyToAssignModule, CreditCardDebtModule],
 })
 export class CategoriesModule {}

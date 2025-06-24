@@ -1,17 +1,22 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { CategoriesService } from './categories.service';
+import { CategoryReadService } from './services/read/category-read.service';
+import { CategoryWriteService } from './services/write/category-write.service';
 import { SupabaseService } from '../../supabase/supabase.service';
 import { ReadyToAssignService } from '../ready-to-assign/ready-to-assign.service';
+import { CreditCardDebtService } from '../credit-card-debt/credit-card-debt.service';
 
-describe('CategoriesService', () => {
-  let service: CategoriesService;
+describe('Category Services', () => {
+  let categoryReadService: CategoryReadService;
+  let categoryWriteService: CategoryWriteService;
   let supabaseService: SupabaseService;
   let readyToAssignService: ReadyToAssignService;
+  let creditCardDebtService: CreditCardDebtService;
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
-        CategoriesService,
+        CategoryReadService,
+        CategoryWriteService,
         {
           provide: SupabaseService,
           useValue: {
@@ -33,15 +38,24 @@ describe('CategoriesService', () => {
             calculateReadyToAssign: jest.fn().mockResolvedValue(1000),
           },
         },
+        {
+          provide: CreditCardDebtService,
+          useValue: {
+            handleCreditCardLogicForAssignments: jest.fn().mockResolvedValue(undefined),
+          },
+        },
       ],
     }).compile();
 
-    service = module.get<CategoriesService>(CategoriesService);
+    categoryReadService = module.get<CategoryReadService>(CategoryReadService);
+    categoryWriteService = module.get<CategoryWriteService>(CategoryWriteService);
     supabaseService = module.get<SupabaseService>(SupabaseService);
     readyToAssignService = module.get<ReadyToAssignService>(ReadyToAssignService);
+    creditCardDebtService = module.get<CreditCardDebtService>(CreditCardDebtService);
   });
 
   it('should be defined', () => {
-    expect(service).toBeDefined();
+    expect(categoryReadService).toBeDefined();
+    expect(categoryWriteService).toBeDefined();
   });
 });
