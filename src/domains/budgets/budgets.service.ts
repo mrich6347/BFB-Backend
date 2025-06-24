@@ -23,9 +23,6 @@ export class BudgetsService {
  
      if (error) {
        console.log("ERROR finding budget:", error, "Budget ID:", id, "User ID:", userId);
-       if (error.code === 'PGRST116') {
-         throw new Error('Budget not found');
-       }
        throw new Error(error.message);
      }
      return data;
