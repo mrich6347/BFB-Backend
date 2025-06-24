@@ -134,8 +134,8 @@ export class CategoryWriteService {
           .eq('month', targetMonth)
           .maybeSingle();
 
-        // If there's an error other than "no rows found", throw it
-        if (balanceQueryError && balanceQueryError.code !== 'PGRST116') {
+        // If there's an error, throw it
+        if (balanceQueryError) {
           throw new Error(balanceQueryError.message);
         }
 
@@ -1046,9 +1046,9 @@ export class CategoryWriteService {
       .eq('user_id', userId)
       .eq('year', year)
       .eq('month', month)
-      .single();
+      .maybeSingle();
 
-    if (balanceError && balanceError.code !== 'PGRST116') {
+    if (balanceError) {
       throw new Error(balanceError.message);
     }
 

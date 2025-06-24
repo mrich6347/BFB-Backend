@@ -111,9 +111,9 @@ export class DatabaseManagementService {
       .from('user_profiles')
       .select('id')
       .eq('user_id', userId)
-      .single();
+      .maybeSingle();
 
-    if (profileError && profileError.code !== 'PGRST116') { // PGRST116 = no rows returned
+    if (profileError) {
       throw new Error(`Failed to get user profile: ${profileError.message}`);
     }
 
@@ -135,9 +135,9 @@ export class DatabaseManagementService {
       .from('user_profiles')
       .select('id')
       .eq('user_id', userId)
-      .single();
+      .maybeSingle();
 
-    if (profileError && profileError.code !== 'PGRST116') { // PGRST116 = no rows returned
+    if (profileError) {
       throw new Error(`Failed to get user profile: ${profileError.message}`);
     }
 
@@ -160,9 +160,9 @@ export class DatabaseManagementService {
       .from('user_profiles')
       .select('id')
       .eq('user_id', userId)
-      .single();
+      .maybeSingle();
 
-    if (profileError && profileError.code !== 'PGRST116') { // PGRST116 = no rows returned
+    if (profileError) {
       throw new Error(`Failed to get user profile: ${profileError.message}`);
     }
 

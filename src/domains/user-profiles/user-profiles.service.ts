@@ -49,17 +49,14 @@ export class UserProfilesService {
 
   async findByUserId(userId: string, authToken: string): Promise<UserProfileResponse | null> {
     const supabase = this.supabaseService.getAuthenticatedClient(authToken);
-    
+
     const { data, error } = await supabase
       .from('user_profiles')
       .select('id, user_id, username, display_name, created_at, updated_at')
       .eq('user_id', userId)
-      .single();
+      .maybeSingle();
 
     if (error) {
-      if (error.code === 'PGRST116') { // No rows returned
-        return null;
-      }
       console.log("ERROR finding user profile by user_id:", error);
       throw new Error(error.message);
     }
@@ -69,17 +66,14 @@ export class UserProfilesService {
 
   async findByUsername(username: string, authToken: string): Promise<PublicUserProfileResponse | null> {
     const supabase = this.supabaseService.getAuthenticatedClient(authToken);
-    
+
     const { data, error } = await supabase
       .from('user_profiles')
       .select('username, display_name')
       .eq('username', username)
-      .single();
+      .maybeSingle();
 
     if (error) {
-      if (error.code === 'PGRST116') { // No rows returned
-        return null;
-      }
       console.log("ERROR finding user profile by username:", error);
       throw new Error(error.message);
     }

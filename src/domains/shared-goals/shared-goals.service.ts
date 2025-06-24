@@ -218,11 +218,8 @@ export class SharedGoalsService {
       .single();
 
     if (error) {
-      if (error.code === 'PGRST116') {
-        throw new NotFoundException('Goal not found');
-      }
       console.log("ERROR finding shared goal:", error);
-      throw new Error(error.message);
+      throw new NotFoundException('Goal not found');
     }
 
     // Check if user has access to this goal

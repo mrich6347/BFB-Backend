@@ -186,9 +186,9 @@ export class CreditCardDebtService {
         .select('*')
         .eq('transaction_id', transactionId)
         .eq('user_id', userId)
-        .single();
+        .maybeSingle();
 
-      if (debtFetchError && debtFetchError.code !== 'PGRST116') {
+      if (debtFetchError) {
         console.error('Error fetching debt tracking record:', debtFetchError);
         return;
       }
@@ -378,9 +378,9 @@ export class CreditCardDebtService {
         .select('*')
         .eq('transaction_id', transactionId)
         .eq('user_id', userId)
-        .single();
+        .maybeSingle();
 
-      if (debtFetchError && debtFetchError.code !== 'PGRST116') {
+      if (debtFetchError) {
         console.error('Error fetching debt tracking record for deletion:', debtFetchError);
         return;
       }

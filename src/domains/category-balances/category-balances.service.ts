@@ -30,7 +30,7 @@ export class CategoryBalancesService {
 
   async findByCategory(categoryId: string, year: number, month: number, userId: string, authToken: string): Promise<CategoryBalanceResponse | null> {
     const supabase = this.supabaseService.getAuthenticatedClient(authToken);
-    
+
     const { data, error } = await supabase
       .from('category_balances')
       .select('*')
@@ -38,12 +38,9 @@ export class CategoryBalancesService {
       .eq('year', year)
       .eq('month', month)
       .eq('user_id', userId)
-      .single();
+      .maybeSingle();
 
     if (error) {
-      if (error.code === 'PGRST116') {
-        return null; // No data found
-      }
       throw new Error(error.message);
     }
 

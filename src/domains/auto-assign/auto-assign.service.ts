@@ -265,9 +265,9 @@ export class AutoAssignService {
       .eq('user_id', userId)
       .eq('name', 'Hidden Categories')
       .eq('is_system_group', true)
-      .single();
+      .maybeSingle();
 
-    if (hiddenGroupError && hiddenGroupError.code !== 'PGRST116') {
+    if (hiddenGroupError) {
       throw new Error(hiddenGroupError.message);
     }
 

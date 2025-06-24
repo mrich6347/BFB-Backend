@@ -115,9 +115,9 @@ export class CategoryReadService {
       .eq('user_id', userId)
       .eq('year', currentYear)
       .eq('month', currentMonth)
-      .single();
+      .maybeSingle();
 
-    if (error && error.code !== 'PGRST116') {
+    if (error) {
       throw new Error(error.message);
     }
 
