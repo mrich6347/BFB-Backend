@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { CategoryReadService } from './services/read/category-read.service';
 import { CategoryWriteService } from './services/write/category-write.service';
+import { CategoryMoneyMovementWriteService } from './services/write/category-money-movement-write.service';
 import { SupabaseService } from '../../supabase/supabase.service';
 import { ReadyToAssignService } from '../ready-to-assign/ready-to-assign.service';
 import { CreditCardDebtService } from '../credit-card-debt/credit-card-debt.service';
@@ -8,6 +9,7 @@ import { CreditCardDebtService } from '../credit-card-debt/credit-card-debt.serv
 describe('Category Services', () => {
   let categoryReadService: CategoryReadService;
   let categoryWriteService: CategoryWriteService;
+  let categoryMoneyMovementWriteService: CategoryMoneyMovementWriteService;
   let supabaseService: SupabaseService;
   let readyToAssignService: ReadyToAssignService;
   let creditCardDebtService: CreditCardDebtService;
@@ -17,6 +19,7 @@ describe('Category Services', () => {
       providers: [
         CategoryReadService,
         CategoryWriteService,
+        CategoryMoneyMovementWriteService,
         {
           provide: SupabaseService,
           useValue: {
@@ -49,6 +52,7 @@ describe('Category Services', () => {
 
     categoryReadService = module.get<CategoryReadService>(CategoryReadService);
     categoryWriteService = module.get<CategoryWriteService>(CategoryWriteService);
+    categoryMoneyMovementWriteService = module.get<CategoryMoneyMovementWriteService>(CategoryMoneyMovementWriteService);
     supabaseService = module.get<SupabaseService>(SupabaseService);
     readyToAssignService = module.get<ReadyToAssignService>(ReadyToAssignService);
     creditCardDebtService = module.get<CreditCardDebtService>(CreditCardDebtService);
@@ -57,5 +61,6 @@ describe('Category Services', () => {
   it('should be defined', () => {
     expect(categoryReadService).toBeDefined();
     expect(categoryWriteService).toBeDefined();
+    expect(categoryMoneyMovementWriteService).toBeDefined();
   });
 });
