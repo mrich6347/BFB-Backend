@@ -1,44 +1,19 @@
-# BFB Backend
+## Hey, Notable Team! 👋
 
-A NestJS server application with Supabase authentication integration.
+(Please note this project is still VERY much a work in progress, but gives a good idea of the direction I am headed in)
 
-## Prerequisites
+### 🏗️ Tech Stack
+- **NestJS**: With TypeScript.
+- **Supabase**: For Postgres and authentication.
 
-- Node.js (v23)
-- npm
-- Supabase account and project
 
-## Environment Setup
 
-1. Create a `.env` file in the root directory with the following variables:
-```env
-SUPABASE_URL=your_supabase_project_url
-SUPABASE_KEY=your_supabase_anon_key
-```
 
-## Installation
-
-1. Set the correct Node.js version:
-```bash
-nvm use 23
-```
-
-2. Install dependencies:
-```bash
-npm install
-```
-
-## Running the Application
-
-To start the development server:
-```bash
-npm run start:dev
-```
-
-The server will be available at `http://localhost:3000` by default.
-
-## Features
-
-- NestJS server setup
-- Supabase authentication integration
-- Development hot-reload enabled
+### 📁 Key Directories
+- **`/src/domains/`** - Each domain contains:
+  - Controllers (HTTP handlers and routing)
+  - Services (business logic and data operations)
+  - DTOs (data validation and transformation)
+  - Modules (dependency injection configuration)
+- **`/supabase/migrations/`** - Database schema and data migrations
+- **`/src/testing/`** - Testing scenario framework used to validate YNAB scenarios
