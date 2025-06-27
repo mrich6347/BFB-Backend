@@ -48,7 +48,7 @@ export class BudgetsService {
 
   async create(createBudgetDto: CreateBudgetDto, userId: string, authToken: string): Promise<BudgetResponse> {
     const supabase = this.supabaseService.getAuthenticatedClient(authToken);
-
+    
     let payload = {
       ...createBudgetDto,
       user_id: userId,
@@ -67,36 +67,7 @@ export class BudgetsService {
       throw new Error(error.message);
     }
 
-    // Wait for the trigger to complete by checking if default categories were created
-    // This ensures the trigger has finished executing before we return
-    await this.waitForDefaultCategories(supabase, data.id, userId);
-
     return data;
-  }
-
-  private async waitForDefaultCategories(supabase: any, budgetId: string, userId: string): Promise<void> {
-    const maxAttempts = 10;
-    const delayMs = 100;
-
-    for (let attempt = 0; attempt < maxAttempts; attempt++) {
-      const { data: categories, error } = await supabase
-        .from('categories')
-        .select('id')
-        .eq('budget_id', budgetId)
-        .eq('user_id', userId)
-        .limit(1);
-
-      if (!error && categories && categories.length > 0) {
-        // Categories exist, trigger has completed
-        return;
-      }
-
-      // Wait before next attempt
-      await new Promise(resolve => setTimeout(resolve, delayMs));
-    }
-
-    // If we get here, something might be wrong, but don't fail the budget creation
-    console.warn(`Default categories not found after ${maxAttempts} attempts for budget ${budgetId}`);
   }
 
   async update(id: string, updateBudgetDto: UpdateBudgetDto, userId: string, authToken: string): Promise<BudgetResponse> {
