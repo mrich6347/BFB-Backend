@@ -1,4 +1,3 @@
-## Hey, Notable Team! 👋
 
 (Please note this project is still VERY much a work in progress, but gives a good idea of the direction I am headed in)
 
