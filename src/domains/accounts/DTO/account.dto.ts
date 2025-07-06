@@ -1,4 +1,4 @@
-import { IsString, IsEnum, IsNumber, IsBoolean, IsOptional, IsUUID } from 'class-validator';
+import { IsString, IsEnum, IsNumber, IsBoolean, IsOptional, IsUUID, IsNotEmpty } from 'class-validator';
 import { Transform } from 'class-transformer';
 
 export enum AccountType {
@@ -36,6 +36,7 @@ export class AccountResponse {
     uncleared_balance: number;
     working_balance: number;
     is_active: boolean;
+    display_order: number;
 }
 
 export class AccountWithReadyToAssignResponse {
@@ -82,4 +83,10 @@ export class BalanceHistoryPoint {
     balance: number;
     memo?: string;
     transaction_id?: string;
+}
+
+export class ReorderAccountsDto {
+    @IsUUID('4', { each: true })
+    @IsNotEmpty()
+    account_ids: string[];
 }

@@ -1,5 +1,5 @@
 import { ConflictException, Injectable } from '@nestjs/common';
-import { AccountResponse, CreateAccountDto, AccountWithReadyToAssignResponse, ReconcileAccountDto, ReconcileAccountResponse, UpdateAccountDto, CloseAccountResponse } from './DTO/account.dto';
+import { AccountResponse, CreateAccountDto, AccountWithReadyToAssignResponse, ReconcileAccountDto, ReconcileAccountResponse, UpdateAccountDto, CloseAccountResponse, ReorderAccountsDto } from './DTO/account.dto';
 import { SupabaseService } from '../../supabase/supabase.service';
 import { SupabaseClient } from '@supabase/supabase-js';
 import { ReadyToAssignService } from '../ready-to-assign/ready-to-assign.service';
@@ -25,13 +25,32 @@ export class AccountsService {
 
     const { account_balance, ...accountData } = createAccountDto;
 
+    // Get the next display_order for this account type
+    const { data: existingAccounts, error: countError } = await supabase
+      .from('accounts')
+      .select('display_order')
+      .eq('user_id', userId)
+      .eq('budget_id', accountData.budget_id)
+      .eq('account_type', accountData.account_type)
+      .order('display_order', { ascending: false })
+      .limit(1);
+
+    if (countError) {
+      throw new Error(countError.message);
+    }
+
+    const nextDisplayOrder = existingAccounts && existingAccounts.length > 0
+      ? existingAccounts[0].display_order + 1
+      : 0;
+
     let payload = {
       ...accountData,
       user_id: userId,
       account_balance: account_balance || 0,
       cleared_balance: account_balance || 0,
       uncleared_balance: 0,
-      working_balance: account_balance || 0
+      working_balance: account_balance || 0,
+      display_order: nextDisplayOrder
     }
 
     await this.checkForExistingAccount(userId, authToken, accountData.budget_id, accountData.name);
@@ -39,7 +58,7 @@ export class AccountsService {
     const { data, error } = await supabase
       .from('accounts')
       .insert(payload)
-      .select('id, name, account_type, budget_id, account_balance, cleared_balance, uncleared_balance, working_balance, is_active')
+      .select('id, name, account_type, budget_id, account_balance, cleared_balance, uncleared_balance, working_balance, is_active, display_order')
       .single();
 
     if (error) {
@@ -64,9 +83,10 @@ export class AccountsService {
 
     const { data, error } = await supabase
       .from('accounts')
-      .select('id, name, account_type, budget_id, account_balance, cleared_balance, uncleared_balance, working_balance, is_active')
+      .select('id, name, account_type, budget_id, account_balance, cleared_balance, uncleared_balance, working_balance, is_active, display_order')
       .eq('user_id', userId)
-      .eq('budget_id', budgetId);
+      .eq('budget_id', budgetId)
+      .order('display_order', { ascending: true });
 
     if (error) {
       throw new Error(error.message);
@@ -80,7 +100,7 @@ export class AccountsService {
 
     const { data, error } = await supabase
       .from('accounts')
-      .select('id, name, account_type, budget_id, account_balance, cleared_balance, uncleared_balance, working_balance, is_active')
+      .select('id, name, account_type, budget_id, account_balance, cleared_balance, uncleared_balance, working_balance, is_active, display_order')
       .eq('id', id)
       .eq('user_id', userId)
       .single();
@@ -134,7 +154,7 @@ export class AccountsService {
       .update(updateAccountDto)
       .eq('id', accountId)
       .eq('user_id', userId)
-      .select('id, name, account_type, budget_id, account_balance, cleared_balance, uncleared_balance, working_balance, is_active')
+      .select('id, name, account_type, budget_id, account_balance, cleared_balance, uncleared_balance, working_balance, is_active, display_order')
       .single();
 
     if (error) {
@@ -407,7 +427,7 @@ export class AccountsService {
     // Get all TRACKING and CREDIT accounts in the same budget
     const { data, error } = await supabase
       .from('accounts')
-      .select('id, name, account_type, budget_id, account_balance, cleared_balance, uncleared_balance, working_balance, is_active')
+      .select('id, name, account_type, budget_id, account_balance, cleared_balance, uncleared_balance, working_balance, is_active, display_order')
       .eq('user_id', userId)
       .eq('budget_id', sourceAccount.budget_id)
       .in('account_type', ['TRACKING', 'CREDIT'])
@@ -483,6 +503,23 @@ export class AccountsService {
       adjustmentTransaction,
       readyToAssign
     };
+  }
+
+  async reorder(reorderDto: ReorderAccountsDto, userId: string, authToken: string): Promise<void> {
+    const supabase = this.supabaseService.getAuthenticatedClient(authToken);
+
+    // Update display_order for each account
+    for (let i = 0; i < reorderDto.account_ids.length; i++) {
+      const { error } = await supabase
+        .from('accounts')
+        .update({ display_order: i })
+        .eq('id', reorderDto.account_ids[i])
+        .eq('user_id', userId);
+
+      if (error) {
+        throw new Error(error.message);
+      }
+    }
   }
 
   /**
