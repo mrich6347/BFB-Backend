@@ -1,11 +1,12 @@
 import { Injectable } from '@nestjs/common';
 import { SupabaseClient } from '@supabase/supabase-js';
 import { SupabaseService } from '../../supabase/supabase.service';
-import { CreateTransactionDto, UpdateTransactionDto, TransactionResponse, TransactionWithAccountsResponse, TransactionDeleteResponse } from './dto/transaction.dto';
+import { CreateTransactionDto, UpdateTransactionDto, TransactionResponse, TransactionWithAccountsResponse, TransactionDeleteResponse, TransactionWithReadyToAssignResponse, TransactionWithAccountsAndReadyToAssignResponse } from './dto/transaction.dto';
 import { CategoryBalancesService } from '../category-balances/category-balances.service';
 import { CategoryReadService } from '../categories/services/read/category-read.service';
 import { UserDateContextUtils } from '../../common/interfaces/user-date-context.interface';
 import { CreditCardDebtService } from '../credit-card-debt/credit-card-debt.service';
+import { ReadyToAssignService } from '../ready-to-assign/ready-to-assign.service';
 import { v4 as uuidv4 } from 'uuid';
 
 @Injectable()
@@ -16,12 +17,13 @@ export class TransactionsService {
     private supabaseService: SupabaseService,
     private categoryBalancesService: CategoryBalancesService,
     private categoryReadService: CategoryReadService,
-    private creditCardDebtService: CreditCardDebtService
+    private creditCardDebtService: CreditCardDebtService,
+    private readyToAssignService: ReadyToAssignService
   ) {
     this.supabase = this.supabaseService.client;
   }
 
-  async create(createTransactionDto: CreateTransactionDto, userId: string, authToken: string): Promise<TransactionResponse | TransactionWithAccountsResponse> {
+  async create(createTransactionDto: CreateTransactionDto, userId: string, authToken: string): Promise<TransactionWithReadyToAssignResponse | TransactionWithAccountsAndReadyToAssignResponse> {
     const supabase = this.supabaseService.getAuthenticatedClient(authToken);
 
     // Check if this is a transfer transaction
@@ -144,10 +146,22 @@ export class TransactionsService {
       // Don't throw here - transaction was created successfully, balance update is secondary
     }
 
+    // Get budget ID for calculating ready to assign
+    const budgetId = await this.getBudgetIdFromAccount(data.account_id, userId, authToken);
+    let readyToAssign = 0;
+
+    if (budgetId) {
+      try {
+        readyToAssign = await this.readyToAssignService.calculateReadyToAssign(budgetId, userId, authToken);
+      } catch (error) {
+        console.error('Error calculating ready to assign:', error);
+        // Continue with readyToAssign = 0
+      }
+    }
+
     // For transfer transactions, return both account balances
     if (isTransfer) {
       try {
-        const budgetId = await this.getBudgetIdFromAccount(data.account_id, userId, authToken);
         if (budgetId) {
           const targetAccountName = this.parseTransferAccountName(data.payee || '');
           const targetAccount = await this.getAccountByName(targetAccountName, budgetId, userId, authToken);
@@ -158,7 +172,8 @@ export class TransactionsService {
           return {
             transaction: data,
             sourceAccount: sourceAccountDetails,
-            targetAccount: targetAccountDetails
+            targetAccount: targetAccountDetails,
+            readyToAssign
           };
         }
       } catch (accountError) {
@@ -167,7 +182,10 @@ export class TransactionsService {
       }
     }
 
-    return data;
+    return {
+      transaction: data,
+      readyToAssign
+    };
   }
 
   async findAllByAccount(accountId: string, userId: string, authToken: string): Promise<TransactionResponse[]> {

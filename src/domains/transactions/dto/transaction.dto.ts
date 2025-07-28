@@ -125,3 +125,15 @@ export class TransactionDeleteResponse {
   sourceAccount?: any; // AccountResponse from accounts module
   targetAccount?: any; // AccountResponse from accounts module
 }
+
+export class TransactionWithReadyToAssignResponse {
+  transaction: TransactionResponse;
+  readyToAssign: number;
+}
+
+export class TransactionWithAccountsAndReadyToAssignResponse {
+  transaction: TransactionResponse;
+  sourceAccount?: any; // AccountResponse from accounts module
+  targetAccount?: any; // AccountResponse from accounts module
+  readyToAssign: number;
+}

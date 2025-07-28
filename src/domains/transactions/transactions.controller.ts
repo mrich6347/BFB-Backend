@@ -1,6 +1,6 @@
 import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards, Req, Query, ParseUUIDPipe } from '@nestjs/common';
 import { TransactionsService } from './transactions.service';
-import { CreateTransactionDto, UpdateTransactionDto, TransactionResponse, TransactionWithAccountsResponse, TransactionDeleteResponse } from './dto/transaction.dto';
+import { CreateTransactionDto, UpdateTransactionDto, TransactionResponse, TransactionWithAccountsResponse, TransactionDeleteResponse, TransactionWithReadyToAssignResponse, TransactionWithAccountsAndReadyToAssignResponse } from './dto/transaction.dto';
 import { SupabaseAuthGuard } from '../../guards/auth.guard';
 import { AuthService } from '../../configurations/auth/auth.service';
 
@@ -13,7 +13,7 @@ export class TransactionsController {
   ) {}
 
   @Post()
-  async create(@Body() createTransactionDto: CreateTransactionDto, @Req() req: any): Promise<TransactionResponse | TransactionWithAccountsResponse> {
+  async create(@Body() createTransactionDto: CreateTransactionDto, @Req() req: any): Promise<TransactionWithReadyToAssignResponse | TransactionWithAccountsAndReadyToAssignResponse> {
     const authToken = this.authService.getAuthToken(req);
     return this.transactionsService.create(createTransactionDto, req.user.id, authToken);
   }
