@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { SupabaseClient } from '@supabase/supabase-js';
 import { SupabaseService } from '../../supabase/supabase.service';
-import { CreateTransactionDto, UpdateTransactionDto, TransactionResponse, TransactionWithAccountsResponse, TransactionDeleteResponse, TransactionWithReadyToAssignResponse, TransactionWithAccountsAndReadyToAssignResponse } from './dto/transaction.dto';
+import { CreateTransactionDto, UpdateTransactionDto, TransactionResponse, TransactionWithAccountsResponse, TransactionDeleteResponse, TransactionWithReadyToAssignResponse, TransactionWithAccountsAndReadyToAssignResponse, TransactionDeleteWithReadyToAssignResponse } from './dto/transaction.dto';
 import { CategoryBalancesService } from '../category-balances/category-balances.service';
 import { CategoryReadService } from '../categories/services/read/category-read.service';
 import { UserDateContextUtils } from '../../common/interfaces/user-date-context.interface';
@@ -263,7 +263,7 @@ export class TransactionsService {
     return data;
   }
 
-  async update(id: string, updateTransactionDto: UpdateTransactionDto, userId: string, authToken: string): Promise<TransactionResponse | TransactionWithAccountsResponse> {
+  async update(id: string, updateTransactionDto: UpdateTransactionDto, userId: string, authToken: string): Promise<TransactionWithReadyToAssignResponse | TransactionWithAccountsAndReadyToAssignResponse> {
     const supabase = this.supabaseService.getAuthenticatedClient(authToken);
 
     // First get the original transaction to compare changes
@@ -437,6 +437,18 @@ export class TransactionsService {
       // Don't throw here - transaction was updated successfully, balance update is secondary
     }
 
+    // Calculate ready to assign using the existing budgetId
+    let readyToAssign = 0;
+
+    if (budgetId) {
+      try {
+        readyToAssign = await this.readyToAssignService.calculateReadyToAssign(budgetId, userId, authToken);
+      } catch (error) {
+        console.error('Error calculating ready to assign:', error);
+        // Continue with readyToAssign = 0
+      }
+    }
+
     // For transfer transactions, return both account balances
     if (data.transfer_id) {
       try {
@@ -460,7 +472,8 @@ export class TransactionsService {
           return {
             transaction: data,
             sourceAccount: sourceAccountResult,
-            targetAccount: targetAccountDetails
+            targetAccount: targetAccountDetails,
+            readyToAssign
           };
         }
       } catch (accountError) {
@@ -469,10 +482,13 @@ export class TransactionsService {
       }
     }
 
-    return data;
+    return {
+      transaction: data,
+      readyToAssign
+    };
   }
 
-  async remove(id: string, userId: string, authToken: string): Promise<void | TransactionDeleteResponse> {
+  async remove(id: string, userId: string, authToken: string): Promise<TransactionDeleteWithReadyToAssignResponse> {
     const supabase = this.supabaseService.getAuthenticatedClient(authToken);
 
     // First get the transaction to reverse its activity
@@ -569,6 +585,19 @@ export class TransactionsService {
       // Don't throw here - transaction was deleted successfully, balance update is secondary
     }
 
+    // Calculate ready to assign after transaction deletion
+    const budgetId = await this.getBudgetIdFromAccount(transaction.account_id, userId, authToken);
+    let readyToAssign = 0;
+
+    if (budgetId) {
+      try {
+        readyToAssign = await this.readyToAssignService.calculateReadyToAssign(budgetId, userId, authToken);
+      } catch (error) {
+        console.error('Error calculating ready to assign:', error);
+        // Continue with readyToAssign = 0
+      }
+    }
+
     // For transfer transactions, return both account balances
     if (transaction.transfer_id && linkedAccountId) {
       try {
@@ -580,16 +609,19 @@ export class TransactionsService {
 
         return {
           sourceAccount: sourceAccountDetails,
-          targetAccount: targetAccountDetails
+          targetAccount: targetAccountDetails,
+          readyToAssign
         };
       } catch (accountError) {
         console.error('Error getting account details for transfer delete response:', accountError);
-        // Fall back to void response
+        // Fall back to basic response
       }
     }
 
-    // For non-transfer transactions, return void
-    return;
+    // For non-transfer transactions, return basic response
+    return {
+      readyToAssign
+    };
   }
 
   async toggleCleared(id: string, userId: string, authToken: string): Promise<TransactionResponse> {
