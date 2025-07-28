@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { SupabaseClient } from '@supabase/supabase-js';
 import { SupabaseService } from '../../supabase/supabase.service';
-import { CreateTransactionDto, UpdateTransactionDto, TransactionResponse, TransactionWithAccountsResponse, TransactionDeleteResponse, TransactionWithReadyToAssignResponse, TransactionWithAccountsAndReadyToAssignResponse, TransactionDeleteWithReadyToAssignResponse } from './dto/transaction.dto';
+import { CreateTransactionDto, UpdateTransactionDto, TransactionResponse, TransactionWithAccountsResponse, TransactionDeleteResponse, TransactionDeleteWithReadyToAssignResponse, TransactionWithReadyToAssignAndCategoryBalanceResponse, TransactionWithAccountsAndReadyToAssignAndCategoryBalanceResponse } from './dto/transaction.dto';
 import { CategoryBalancesService } from '../category-balances/category-balances.service';
 import { CategoryReadService } from '../categories/services/read/category-read.service';
 import { UserDateContextUtils } from '../../common/interfaces/user-date-context.interface';
@@ -23,7 +23,7 @@ export class TransactionsService {
     this.supabase = this.supabaseService.client;
   }
 
-  async create(createTransactionDto: CreateTransactionDto, userId: string, authToken: string): Promise<TransactionWithReadyToAssignResponse | TransactionWithAccountsAndReadyToAssignResponse> {
+  async create(createTransactionDto: CreateTransactionDto, userId: string, authToken: string): Promise<TransactionWithReadyToAssignAndCategoryBalanceResponse | TransactionWithAccountsAndReadyToAssignAndCategoryBalanceResponse> {
     const supabase = this.supabaseService.getAuthenticatedClient(authToken);
 
     // Check if this is a transfer transaction
@@ -159,6 +159,30 @@ export class TransactionsService {
       }
     }
 
+    // Get the affected category balance if transaction has a category
+    let categoryBalance: any = null;
+    if (data.category_id && budgetId) {
+      try {
+        // Get current user date context for determining which month's balance to fetch
+        const { year: currentYear, month: currentMonth } = UserDateContextUtils.getCurrentUserDate({
+          userYear: createTransactionDto.userYear,
+          userMonth: createTransactionDto.userMonth,
+          userDate: createTransactionDto.userDate
+        });
+
+        categoryBalance = await this.categoryBalancesService.findByCategory(
+          data.category_id,
+          currentYear,
+          currentMonth,
+          userId,
+          authToken
+        );
+      } catch (error) {
+        console.error('Error fetching category balance:', error);
+        // Continue with categoryBalance = null
+      }
+    }
+
     // For transfer transactions, return both account balances
     if (isTransfer) {
       try {
@@ -173,7 +197,8 @@ export class TransactionsService {
             transaction: data,
             sourceAccount: sourceAccountDetails,
             targetAccount: targetAccountDetails,
-            readyToAssign
+            readyToAssign,
+            categoryBalance
           };
         }
       } catch (accountError) {
@@ -184,7 +209,8 @@ export class TransactionsService {
 
     return {
       transaction: data,
-      readyToAssign
+      readyToAssign,
+      categoryBalance
     };
   }
 
@@ -263,7 +289,7 @@ export class TransactionsService {
     return data;
   }
 
-  async update(id: string, updateTransactionDto: UpdateTransactionDto, userId: string, authToken: string): Promise<TransactionWithReadyToAssignResponse | TransactionWithAccountsAndReadyToAssignResponse> {
+  async update(id: string, updateTransactionDto: UpdateTransactionDto, userId: string, authToken: string): Promise<TransactionWithReadyToAssignAndCategoryBalanceResponse | TransactionWithAccountsAndReadyToAssignAndCategoryBalanceResponse> {
     const supabase = this.supabaseService.getAuthenticatedClient(authToken);
 
     // First get the original transaction to compare changes
@@ -449,6 +475,30 @@ export class TransactionsService {
       }
     }
 
+    // Get the affected category balance if transaction has a category
+    let categoryBalance: any = null;
+    if (data.category_id && budgetId) {
+      try {
+        // Get current user date context for determining which month's balance to fetch
+        const { year: currentYear, month: currentMonth } = UserDateContextUtils.getCurrentUserDate({
+          userYear: updateTransactionDto.userYear,
+          userMonth: updateTransactionDto.userMonth,
+          userDate: updateTransactionDto.userDate
+        });
+
+        categoryBalance = await this.categoryBalancesService.findByCategory(
+          data.category_id,
+          currentYear,
+          currentMonth,
+          userId,
+          authToken
+        );
+      } catch (error) {
+        console.error('Error fetching category balance:', error);
+        // Continue with categoryBalance = null
+      }
+    }
+
     // For transfer transactions, return both account balances
     if (data.transfer_id) {
       try {
@@ -473,7 +523,8 @@ export class TransactionsService {
             transaction: data,
             sourceAccount: sourceAccountResult,
             targetAccount: targetAccountDetails,
-            readyToAssign
+            readyToAssign,
+            categoryBalance
           };
         }
       } catch (accountError) {
@@ -484,7 +535,8 @@ export class TransactionsService {
 
     return {
       transaction: data,
-      readyToAssign
+      readyToAssign,
+      categoryBalance
     };
   }
 

@@ -143,3 +143,17 @@ export class TransactionDeleteWithReadyToAssignResponse {
   targetAccount?: any; // AccountResponse from accounts module
   readyToAssign: number;
 }
+
+export class TransactionWithReadyToAssignAndCategoryBalanceResponse {
+  transaction: TransactionResponse;
+  readyToAssign: number;
+  categoryBalance?: any; // CategoryBalanceResponse from category-balances module
+}
+
+export class TransactionWithAccountsAndReadyToAssignAndCategoryBalanceResponse {
+  transaction: TransactionResponse;
+  sourceAccount?: any; // AccountResponse from accounts module
+  targetAccount?: any; // AccountResponse from accounts module
+  readyToAssign: number;
+  categoryBalance?: any; // CategoryBalanceResponse from category-balances module
+}
