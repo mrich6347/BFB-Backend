@@ -12,6 +12,7 @@ export class CreditCardDebtService {
    * 1. Create a credit_card_debt_tracking record
    * 2. Automatically move available money from the spending category to the payment category
    * 3. Track debt_amount and covered_amount
+   * Returns the payment category ID if this was a credit card transaction
    */
   async handleCreditCardTransaction(
     transactionId: string,
@@ -24,7 +25,7 @@ export class CreditCardDebtService {
     userYear?: number,
     userMonth?: number,
     updateCategoryActivityCallback?: (categoryId: string, budgetId: string, date: string, amount: number, userId: string, authToken: string, userCurrentDate?: string, userYear?: number, userMonth?: number) => Promise<any>
-  ): Promise<void> {
+  ): Promise<{ paymentCategoryId?: string }> {
     const supabase = this.supabaseService.getAuthenticatedClient(authToken);
 
     // Check if this is a credit card account
@@ -37,12 +38,12 @@ export class CreditCardDebtService {
 
     if (accountError || !account || account.account_type !== 'CREDIT') {
       // Not a credit card transaction, no special handling needed
-      return;
+      return {};
     }
 
     // Only handle outflow transactions (spending)
     if (amount >= 0) {
-      return;
+      return {};
     }
 
     const spendingAmount = Math.abs(amount); // Convert to positive amount
@@ -65,7 +66,7 @@ export class CreditCardDebtService {
 
     if (paymentCategoryError || !paymentCategory) {
       console.error(`Payment category '${paymentCategoryName}' not found for credit card transaction`);
-      return;
+      return {};
     }
 
     // Get the spending category's current available balance
@@ -80,7 +81,7 @@ export class CreditCardDebtService {
 
     if (spendingBalanceError || !spendingBalance) {
       console.error(`Could not find spending category balance for YNAB credit card logic`);
-      return;
+      return {};
     }
 
     // Calculate how much money we can move (limited by available balance)
@@ -104,7 +105,7 @@ export class CreditCardDebtService {
 
       if (debtError) {
         console.error('Error creating credit card debt tracking record:', debtError);
-        return;
+        return { paymentCategoryId: paymentCategory.id };
       }
 
       console.log(`✅ Created debt tracking record: debt=$${spendingAmount}, covered=$${availableToMove}`);
@@ -128,9 +129,12 @@ export class CreditCardDebtService {
       } else {
         console.log(`ℹ️ No money available to cover from category to payment category`);
       }
+
+      return { paymentCategoryId: paymentCategory.id };
     } catch (error) {
       console.error('Error in YNAB credit card logic:', error);
       // Don't throw - this is automatic behavior, transaction should still succeed
+      return { paymentCategoryId: paymentCategory.id };
     }
   }
 

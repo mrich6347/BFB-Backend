@@ -97,6 +97,9 @@ export class TransactionsService {
       }
     }
 
+    // Track payment category ID for credit card transactions
+    let paymentCategoryId: string | undefined = undefined;
+
     // Update category activity if transaction has a category (but not for ready-to-assign)
     if (data.category_id && data.amount !== 0 && !isReadyToAssign) {
       const budgetId = await this.getBudgetIdFromAccount(data.account_id, userId, authToken);
@@ -105,7 +108,7 @@ export class TransactionsService {
         try {
           // For credit card transactions, handle YNAB logic BEFORE updating category activity
           // This ensures we check available balance before it's affected by the transaction
-          await this.creditCardDebtService.handleCreditCardTransaction(
+          const creditCardResult = await this.creditCardDebtService.handleCreditCardTransaction(
             data.id,
             data.account_id,
             data.category_id,
@@ -117,6 +120,11 @@ export class TransactionsService {
             createTransactionDto.userMonth,
             this.updateCategoryActivity.bind(this)
           );
+
+          // Store payment category ID if this was a credit card transaction
+          if (creditCardResult.paymentCategoryId) {
+            paymentCategoryId = creditCardResult.paymentCategoryId;
+          }
 
           // Update category activity for all account types (after credit card logic)
           await this.updateCategoryActivity(
@@ -159,8 +167,8 @@ export class TransactionsService {
       }
     }
 
-    // Get the affected category balance if transaction has a category
-    let categoryBalance: any = null;
+    // Get the affected category balance(s) if transaction has a category
+    let categoryBalances: any[] = [];
     if (data.category_id && budgetId) {
       try {
         // Get current user date context for determining which month's balance to fetch
@@ -170,16 +178,36 @@ export class TransactionsService {
           userDate: createTransactionDto.userDate
         });
 
-        categoryBalance = await this.categoryBalancesService.findByCategory(
+        // Fetch spending category balance
+        const spendingBalance = await this.categoryBalancesService.findByCategory(
           data.category_id,
           currentYear,
           currentMonth,
           userId,
           authToken
         );
+        
+        if (spendingBalance) {
+          categoryBalances.push(spendingBalance);
+        }
+
+        // If this was a credit card transaction, also fetch payment category balance
+        if (paymentCategoryId) {
+          const paymentBalance = await this.categoryBalancesService.findByCategory(
+            paymentCategoryId,
+            currentYear,
+            currentMonth,
+            userId,
+            authToken
+          );
+          
+          if (paymentBalance) {
+            categoryBalances.push(paymentBalance);
+          }
+        }
       } catch (error) {
-        console.error('Error fetching category balance:', error);
-        // Continue with categoryBalance = null
+        console.error('Error fetching category balances:', error);
+        // Continue with empty categoryBalances array
       }
     }
 
@@ -198,7 +226,8 @@ export class TransactionsService {
             sourceAccount: sourceAccountDetails,
             targetAccount: targetAccountDetails,
             readyToAssign,
-            categoryBalance
+            categoryBalance: categoryBalances.length > 0 ? categoryBalances[0] : undefined, // Keep backward compat
+            categoryBalances: categoryBalances.length > 0 ? categoryBalances : undefined
           };
         }
       } catch (accountError) {
@@ -210,7 +239,8 @@ export class TransactionsService {
     return {
       transaction: data,
       readyToAssign,
-      categoryBalance
+      categoryBalance: categoryBalances.length > 0 ? categoryBalances[0] : undefined, // Keep backward compat
+      categoryBalances: categoryBalances.length > 0 ? categoryBalances : undefined
     };
   }
 
