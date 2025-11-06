@@ -67,20 +67,62 @@ export class TransactionsService {
 
     // Handle transfer creation if this is a transfer transaction
     if (isTransfer) {
+      console.log('🔄 TRANSFER TRANSACTION CREATION STARTED');
+      console.log('📋 Source Transaction Details:', {
+        id: data.id,
+        account_id: data.account_id,
+        amount: data.amount,
+        payee: data.payee,
+        date: data.date,
+        is_cleared: data.is_cleared,
+        transfer_id: data.transfer_id
+      });
+      
       try {
         const budgetId = await this.getBudgetIdFromAccount(data.account_id, userId, authToken);
         if (!budgetId) {
           throw new Error('Could not determine budget for transfer');
         }
 
+        // Get source account details before transfer
+        const sourceAccountBefore = await this.getAccountDetails(data.account_id, userId, authToken);
+        console.log('💰 Source Account BEFORE Transfer:', {
+          id: sourceAccountBefore.id,
+          name: sourceAccountBefore.name,
+          account_type: sourceAccountBefore.account_type,
+          account_balance: sourceAccountBefore.account_balance,
+          cleared_balance: sourceAccountBefore.cleared_balance,
+          uncleared_balance: sourceAccountBefore.uncleared_balance,
+          working_balance: sourceAccountBefore.working_balance
+        });
+
         // Parse target account name and find the account
         const targetAccountName = this.parseTransferAccountName(data.payee || '');
         const targetAccount = await this.getAccountByName(targetAccountName, budgetId, userId, authToken);
 
-        // Validate that target is a tracking account
-        if (targetAccount.account_type !== 'TRACKING') {
-          throw new Error('Transfers are only allowed to tracking accounts');
+        // Validate that target is a valid transfer account (CASH or TRACKING)
+        if (targetAccount.account_type !== 'TRACKING' && targetAccount.account_type !== 'CASH') {
+          throw new Error('Transfers are only allowed to cash or tracking accounts');
         }
+
+        // Get target account details before transfer
+        const targetAccountBefore = await this.getAccountDetails(targetAccount.id, userId, authToken);
+        console.log('💰 Target Account BEFORE Transfer:', {
+          id: targetAccountBefore.id,
+          name: targetAccountBefore.name,
+          account_type: targetAccountBefore.account_type,
+          account_balance: targetAccountBefore.account_balance,
+          cleared_balance: targetAccountBefore.cleared_balance,
+          uncleared_balance: targetAccountBefore.uncleared_balance,
+          working_balance: targetAccountBefore.working_balance
+        });
+        console.log(`⚠️  IMPORTANT: Starting balance (account_balance) is ${targetAccountBefore.account_balance}. If this doesn't match YNAB, the final balance will be off.`);
+
+        console.log('💸 Transfer Amount Calculation:', {
+          sourceTransactionAmount: data.amount,
+          absoluteAmount: Math.abs(data.amount),
+          willCreateTargetTransactionWith: Math.abs(data.amount)
+        });
 
         // Create the linked transfer transaction
         await this.createTransferTransaction(data, targetAccount.id, targetAccountName, userId, authToken);
@@ -146,9 +188,29 @@ export class TransactionsService {
     }
 
     // Update account balances after creating transaction
-    console.log(`🆕 Transaction created, updating account balances for account: ${data.account_id}`);
+    if (isTransfer) {
+      console.log('🔄 Updating Source Account Balances...');
+      console.log(`🆕 Source Transaction created, updating account balances for account: ${data.account_id}`);
+    } else {
+      console.log(`🆕 Transaction created, updating account balances for account: ${data.account_id}`);
+    }
+    
     try {
       await this.updateAccountBalances(data.account_id, userId, authToken);
+      
+      // For transfers, log source account after balance update
+      if (isTransfer) {
+        const sourceAccountAfter = await this.getAccountDetails(data.account_id, userId, authToken);
+        console.log('💰 Source Account AFTER Transfer:', {
+          id: sourceAccountAfter.id,
+          name: sourceAccountAfter.name,
+          account_balance: sourceAccountAfter.account_balance,
+          cleared_balance: sourceAccountAfter.cleared_balance,
+          uncleared_balance: sourceAccountAfter.uncleared_balance,
+          working_balance: sourceAccountAfter.working_balance
+        });
+        console.log('✅ TRANSFER TRANSACTION CREATION COMPLETED');
+      }
     } catch (balanceError) {
       console.error('❌ Error updating account balances:', balanceError);
       // Don't throw here - transaction was created successfully, balance update is secondary
@@ -977,7 +1039,7 @@ export class TransactionsService {
     // Get all transactions for this account
     const { data: transactions, error: transactionsError } = await supabase
       .from('transactions')
-      .select('amount, is_cleared')
+      .select('id, amount, is_cleared, payee, transfer_id')
       .eq('account_id', accountId)
       .eq('user_id', userId);
 
@@ -988,7 +1050,7 @@ export class TransactionsService {
     // Get current account to get the account_balance (starting balance)
     const { data: account, error: accountError } = await supabase
       .from('accounts')
-      .select('account_balance')
+      .select('account_balance, name')
       .eq('id', accountId)
       .eq('user_id', userId)
       .single();
@@ -997,41 +1059,51 @@ export class TransactionsService {
       throw new Error(accountError.message);
     }
 
+    console.log(`📋 Account: ${account.name} (${accountId})`);
+    console.log(`📋 Starting account_balance: ${account.account_balance}`);
+    console.log(`⚠️  NOTE: If your balance doesn't match YNAB, check if account_balance is correct. This is the starting balance used in all calculations.`);
+    console.log(`📋 Total transactions to process: ${transactions.length}`);
+
     // Calculate transaction totals
     let clearedTransactionTotal = 0;
     let unclearedTransactionTotal = 0;
 
     console.log(`🔍 Processing ${transactions.length} transactions for account ${accountId}:`);
-    for (const transaction of transactions) {
+    transactions.forEach((transaction, index) => {
       const amount = parseFloat(transaction.amount.toString());
-      console.log(`  Transaction: amount=${amount}, is_cleared=${transaction.is_cleared}`);
+      const isTransfer = transaction.transfer_id ? `(Transfer ID: ${transaction.transfer_id})` : '';
+      console.log(`  [${index + 1}] Transaction ID: ${transaction.id}, Payee: ${transaction.payee}, Amount: ${amount}, is_cleared: ${transaction.is_cleared} ${isTransfer}`);
       if (transaction.is_cleared) {
         clearedTransactionTotal += amount;
       } else {
         unclearedTransactionTotal += amount;
       }
-    }
-    console.log(`📊 Transaction totals: cleared=${clearedTransactionTotal}, uncleared=${unclearedTransactionTotal}`);
+    });
+    
+    console.log(`📊 Transaction totals: cleared=${clearedTransactionTotal.toFixed(2)}, uncleared=${unclearedTransactionTotal.toFixed(2)}`);
 
     // Get the starting balance from the account_balance field
     const accountBalance = parseFloat(account.account_balance.toString());
 
     // Calculate the correct balances using the simple, clear formula
-    const newClearedBalance = accountBalance + clearedTransactionTotal;
-    const newUnclearedBalance = unclearedTransactionTotal;
-    const newWorkingBalance = newClearedBalance + newUnclearedBalance;
+    // Round to 2 decimal places to avoid floating point precision errors
+    const newClearedBalance = Math.round((accountBalance + clearedTransactionTotal) * 100) / 100;
+    const newUnclearedBalance = Math.round(unclearedTransactionTotal * 100) / 100;
+    const newWorkingBalance = Math.round((newClearedBalance + newUnclearedBalance) * 100) / 100;
 
-    console.log(`💰 Account balance calculation:`, {
+    console.log(`💰 Account balance calculation for ${account.name}:`, {
       accountId,
-      accountBalance,
-      clearedTransactionTotal,
-      unclearedTransactionTotal,
-      newClearedBalance,
-      newUnclearedBalance,
-      newWorkingBalance
+      accountBalance: accountBalance.toFixed(2),
+      clearedTransactionTotal: clearedTransactionTotal.toFixed(2),
+      unclearedTransactionTotal: unclearedTransactionTotal.toFixed(2),
+      calculation: `${accountBalance.toFixed(2)} + ${clearedTransactionTotal.toFixed(2)} = ${newClearedBalance.toFixed(2)}`,
+      newClearedBalance: newClearedBalance.toFixed(2),
+      newUnclearedBalance: newUnclearedBalance.toFixed(2),
+      newWorkingBalance: newWorkingBalance.toFixed(2),
+      note: 'All balances rounded to 2 decimal places to prevent floating point precision errors'
     });
 
-    // Update the account with new balances
+    // Update the account with new balances (rounded to 2 decimal places)
     const { data: updateResult, error: updateError } = await supabase
       .from('accounts')
       .update({
@@ -1094,6 +1166,14 @@ export class TransactionsService {
     userId: string,
     authToken: string
   ): Promise<TransactionResponse> {
+    console.log('📤 Creating Transfer Transaction (Target Side)');
+    console.log('📋 Source Transaction:', {
+      id: sourceTransaction.id,
+      account_id: sourceTransaction.account_id,
+      amount: sourceTransaction.amount,
+      transfer_id: sourceTransaction.transfer_id
+    });
+
     const supabase = this.supabaseService.getAuthenticatedClient(authToken);
 
     // Get source account name for the target transaction payee
@@ -1108,12 +1188,20 @@ export class TransactionsService {
       throw new Error(`Failed to get source account name: ${sourceAccount.error.message}`);
     }
 
+    // Calculate target transaction amount
+    const targetAmount = Math.abs(sourceTransaction.amount);
+    console.log('💵 Target Transaction Amount Calculation:', {
+      sourceAmount: sourceTransaction.amount,
+      absoluteValue: Math.abs(sourceTransaction.amount),
+      targetAmount: targetAmount
+    });
+
     // Create the target transaction
     const targetTransactionPayload = {
       user_id: userId,
       account_id: targetAccountId,
       date: sourceTransaction.date,
-      amount: Math.abs(sourceTransaction.amount), // Positive amount for inflow
+      amount: targetAmount, // Positive amount for inflow
       payee: `${TransactionsService.TRANSFER_PREFIX}${sourceAccount.data.name}`,
       memo: sourceTransaction.memo,
       category_id: null, // Tracking accounts don't use categories
@@ -1122,6 +1210,14 @@ export class TransactionsService {
       transfer_id: sourceTransaction.transfer_id
     };
 
+    console.log('📝 Target Transaction Payload:', {
+      account_id: targetAccountId,
+      amount: targetTransactionPayload.amount,
+      date: targetTransactionPayload.date,
+      is_cleared: targetTransactionPayload.is_cleared,
+      transfer_id: targetTransactionPayload.transfer_id
+    });
+
     const { data, error } = await supabase
       .from('transactions')
       .insert(targetTransactionPayload)
@@ -1129,14 +1225,35 @@ export class TransactionsService {
       .single();
 
     if (error) {
+      console.error('❌ Failed to create target transaction:', error);
       throw new Error(`Failed to create transfer transaction: ${error.message}`);
     }
 
+    console.log('✅ Target Transaction Created:', {
+      id: data.id,
+      account_id: data.account_id,
+      amount: data.amount,
+      transfer_id: data.transfer_id
+    });
+
     // Update target account balances
+    console.log('🔄 Updating Target Account Balances...');
     try {
       await this.updateAccountBalances(targetAccountId, userId, authToken);
+      
+      // Get target account details after balance update
+      const targetAccountAfter = await this.getAccountDetails(targetAccountId, userId, authToken);
+      console.log('💰 Target Account AFTER Transfer:', {
+        id: targetAccountAfter.id,
+        name: targetAccountAfter.name,
+        account_balance: targetAccountAfter.account_balance,
+        cleared_balance: targetAccountAfter.cleared_balance,
+        uncleared_balance: targetAccountAfter.uncleared_balance,
+        working_balance: targetAccountAfter.working_balance
+      });
     } catch (balanceError) {
-      console.error('Error updating target account balances:', balanceError);
+      console.error('❌ Error updating target account balances:', balanceError);
+      throw balanceError;
     }
 
     return data;

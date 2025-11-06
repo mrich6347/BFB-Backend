@@ -441,13 +441,21 @@ export class AccountsService {
     // Get the source account to determine its type and budget
     const sourceAccount = await this.findOne(accountId, userId, authToken);
 
-    // Get all TRACKING and CREDIT accounts in the same budget
+    // Determine which account types to include based on source account type
+    // If source is CASH, include CASH, TRACKING, and CREDIT accounts
+    // Otherwise, include TRACKING and CREDIT accounts (existing behavior)
+    const accountTypes = sourceAccount.account_type === 'CASH'
+      ? ['CASH', 'TRACKING', 'CREDIT']
+      : ['TRACKING', 'CREDIT'];
+
+    // Get eligible accounts in the same budget
     const { data, error } = await supabase
       .from('accounts')
       .select('id, name, account_type, budget_id, account_balance, cleared_balance, uncleared_balance, working_balance, is_active, display_order')
       .eq('user_id', userId)
       .eq('budget_id', sourceAccount.budget_id)
-      .in('account_type', ['TRACKING', 'CREDIT'])
+      .in('account_type', accountTypes)
+      .neq('id', accountId) // Exclude the source account to prevent self-transfers
       .eq('is_active', true)
       .order('name');
 
