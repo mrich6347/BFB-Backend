@@ -783,10 +783,12 @@ export class TransactionsService {
       throw new Error(fetchError.message);
     }
 
+    const newClearedStatus = !currentTransaction.is_cleared;
+
     // Toggle the cleared status
     const { data, error } = await supabase
       .from('transactions')
-      .update({ is_cleared: !currentTransaction.is_cleared })
+      .update({ is_cleared: newClearedStatus })
       .eq('id', id)
       .eq('user_id', userId)
       .select('*')
@@ -798,13 +800,92 @@ export class TransactionsService {
 
     // Update account balances after toggling cleared status
     try {
-      await this.updateAccountBalances(data.account_id, userId, authToken);
+      await this.adjustAccountBalancesForClearedToggle(
+        supabase,
+        data.account_id,
+        userId,
+        data.amount,
+        currentTransaction.is_cleared,
+        data.is_cleared
+      );
     } catch (balanceError) {
       console.error('Error updating account balances:', balanceError);
       // Don't throw here - transaction was updated successfully, balance update is secondary
     }
 
     return data;
+  }
+
+  private async adjustAccountBalancesForClearedToggle(
+    supabase: SupabaseClient,
+    accountId: string,
+    userId: string,
+    amount: number,
+    wasCleared: boolean,
+    isCleared: boolean
+  ): Promise<void> {
+    if (wasCleared === isCleared) {
+      return;
+    }
+
+    const amountValue = this.toNumber(amount);
+
+    const { data: account, error: accountError } = await supabase
+      .from('accounts')
+      .select('cleared_balance, uncleared_balance')
+      .eq('id', accountId)
+      .eq('user_id', userId)
+      .single();
+
+    if (accountError) {
+      throw new Error(accountError.message);
+    }
+
+    const currentCleared = this.toNumber(account.cleared_balance);
+    const currentUncleared = this.toNumber(account.uncleared_balance);
+
+    const clearedDelta = isCleared ? amountValue : -amountValue;
+    const unclearedDelta = isCleared ? -amountValue : amountValue;
+
+    const nextCleared = this.roundToTwoDecimals(currentCleared + clearedDelta);
+    const nextUncleared = this.roundToTwoDecimals(currentUncleared + unclearedDelta);
+    const nextWorking = this.roundToTwoDecimals(nextCleared + nextUncleared);
+
+    const { error: updateError } = await supabase
+      .from('accounts')
+      .update({
+        cleared_balance: nextCleared,
+        uncleared_balance: nextUncleared,
+        working_balance: nextWorking
+      })
+      .eq('id', accountId)
+      .eq('user_id', userId);
+
+    if (updateError) {
+      throw new Error(updateError.message);
+    }
+  }
+
+  private roundToTwoDecimals(value: number): number {
+    return Math.round(value * 100) / 100;
+  }
+
+  private toNumber(value: number | string | null): number {
+    if (value === null || value === undefined) {
+      return 0;
+    }
+
+    if (typeof value === 'number') {
+      return value;
+    }
+
+    const parsed = parseFloat(value);
+
+    if (Number.isNaN(parsed)) {
+      throw new Error(`Invalid numeric value: ${value}`);
+    }
+
+    return parsed;
   }
 
   /**
