@@ -1,5 +1,6 @@
 import { IsString, IsEnum, IsNumber, IsBoolean, IsOptional, IsUUID, IsNotEmpty } from 'class-validator';
 import { Transform } from 'class-transformer';
+import { CategoryResponse } from '../../categories/dto/category.dto';
 
 export enum AccountType {
     CASH = 'CASH',
@@ -42,6 +43,7 @@ export class AccountResponse {
 export class AccountWithReadyToAssignResponse {
     account: AccountResponse;
     readyToAssign: number;
+    category?: CategoryResponse; // Optional category (e.g., payment category for credit card accounts)
 }
 
 export class ReconcileAccountDto {

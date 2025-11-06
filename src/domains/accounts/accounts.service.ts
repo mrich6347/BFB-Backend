@@ -6,6 +6,7 @@ import { ReadyToAssignService } from '../ready-to-assign/ready-to-assign.service
 import { TransactionsService } from '../transactions/transactions.service';
 import { TransactionResponse } from '../transactions/dto/transaction.dto';
 import { CategoryWriteService } from '../categories/services/write/category-write.service';
+import { CategoryResponse } from '../categories/dto/category.dto';
 
 @Injectable()
 export class AccountsService {
@@ -267,6 +268,15 @@ export class AccountsService {
     // Get updated account
     const updatedAccount = await this.findOne(accountId, userId, authToken);
 
+    // If this was a credit card account, move the payment category back from Hidden Categories
+    let reactivatedCategory: CategoryResponse | undefined;
+    if (account.account_type === 'CREDIT') {
+      const categoryResult = await this.movePaymentCategoryFromHidden(account.name, account.budget_id, userId, authToken);
+      if (categoryResult) {
+        reactivatedCategory = categoryResult.category;
+      }
+    }
+
     // Calculate updated Ready to Assign
     const readyToAssign = await this.readyToAssignService.calculateReadyToAssign(
       account.budget_id,
@@ -274,10 +284,17 @@ export class AccountsService {
       authToken
     );
 
-    return {
+    const response: AccountWithReadyToAssignResponse = {
       account: updatedAccount,
       readyToAssign
     };
+
+    // Include category in response if it was reactivated
+    if (reactivatedCategory) {
+      response.category = reactivatedCategory;
+    }
+
+    return response;
   }
 
   async updateTrackingBalance(accountId: string, newBalance: number, memo: string, userId: string, authToken: string): Promise<ReconcileAccountResponse> {
@@ -552,6 +569,56 @@ export class AccountsService {
     } catch (error) {
       console.error(`Failed to move payment category '${paymentCategoryName}' to Hidden Categories:`, error);
       // Don't throw - account closure should still succeed even if category move fails
+    }
+  }
+
+  /**
+   * Move the payment category for a credit card account from Hidden Categories back to Credit Card Payments
+   */
+  private async movePaymentCategoryFromHidden(accountName: string, budgetId: string, userId: string, authToken: string): Promise<{ category: CategoryResponse } | null> {
+    const supabase = this.supabaseService.getAuthenticatedClient(authToken);
+
+    // Find the payment category for this credit card account
+    const paymentCategoryName = `${accountName} Payment`;
+
+    const { data: paymentCategory, error: findError } = await supabase
+      .from('categories')
+      .select('id')
+      .eq('name', paymentCategoryName)
+      .eq('budget_id', budgetId)
+      .eq('user_id', userId)
+      .single();
+
+    if (findError || !paymentCategory) {
+      // Payment category not found - this is okay, maybe it was already deleted or never existed
+      console.log(`Payment category '${paymentCategoryName}' not found for account '${accountName}'`);
+      return null;
+    }
+
+    // Find the Credit Card Payments group
+    const { data: creditCardPaymentsGroup, error: groupError } = await supabase
+      .from('category_groups')
+      .select('id')
+      .eq('budget_id', budgetId)
+      .eq('user_id', userId)
+      .eq('name', 'Credit Card Payments')
+      .eq('is_system_group', true)
+      .single();
+
+    if (groupError || !creditCardPaymentsGroup) {
+      console.error(`Credit Card Payments group not found for budget '${budgetId}'`);
+      return null;
+    }
+
+    try {
+      // Use the categories service to unhide the payment category and move it to Credit Card Payments
+      const result = await this.categoryWriteService.unhide(paymentCategory.id, userId, authToken, creditCardPaymentsGroup.id);
+      console.log(`Moved payment category '${paymentCategoryName}' from Hidden Categories to Credit Card Payments`);
+      return { category: result.category };
+    } catch (error) {
+      console.error(`Failed to move payment category '${paymentCategoryName}' from Hidden Categories:`, error);
+      // Don't throw - account reopen should still succeed even if category move fails
+      return null;
     }
   }
 
