@@ -21,15 +21,15 @@ export class ReadyToAssignService {
     // Calculate Total Available Money from accounts
     const totalAvailableMoney = await this.calculateTotalAvailableMoney(supabase, budgetId, userId);
 
-    // Calculate Total Assigned Money from all category balances across all months
-    // This includes negative assigned amounts (money moved back to Ready to Assign)
-    const totalAssignedMoney = await this.calculateTotalAssignedMoney(supabase, budgetId, userId);
+    // Calculate Total Available money sitting in category balances across all months
+    // Negative availability represents overspending that still needs to be covered
+    const totalCategoryAvailability = await this.calculateTotalCategoryAvailability(supabase, budgetId, userId);
 
-    const readyToAssign = totalAvailableMoney - totalAssignedMoney;
+    const readyToAssign = totalAvailableMoney - totalCategoryAvailability;
 
     console.log('───────────────────────────────────────────────────────────');
     console.log(`💰 Total Available Money:     $${totalAvailableMoney.toFixed(2)}`);
-    console.log(`📝 Total Assigned Money:       $${totalAssignedMoney.toFixed(2)}`);
+    console.log(`📝 Total In Categories:        $${totalCategoryAvailability.toFixed(2)}`);
     console.log(`───────────────────────────────────────────────────────────`);
     console.log(`✅ Ready to Assign:            $${readyToAssign.toFixed(2)}`);
     console.log('═══════════════════════════════════════════════════════════\n');
@@ -63,32 +63,9 @@ export class ReadyToAssignService {
 
       // Only cash accounts contribute to Ready to Assign (tracking accounts are excluded)
       if (account.account_type === AccountType.CASH) {
-        // Exclude reconciled transactions from Ready to Assign calculation
-        // In YNAB, reconciled transactions are excluded because they're "locked in" to the reconciled balance
-        // Since working_balance already includes reconciled transactions, we need to subtract their effect
-        // For a negative transaction (-11.69), subtracting it means adding 11.69 back
-        const { data: reconciledTransactions, error: reconciledError } = await supabase
-          .from('transactions')
-          .select('amount')
-          .eq('account_id', account.id)
-          .eq('is_reconciled', true)
-          .eq('user_id', userId);
-
-        if (reconciledError) {
-          console.error(`Error fetching reconciled transactions for ${account.name}:`, reconciledError);
-        } else {
-          const reconciledTotal = reconciledTransactions?.reduce((sum, t) => sum + (parseFloat(t.amount.toString()) || 0), 0) || 0;
-          if (Math.abs(reconciledTotal) > 0.01) {
-            // Subtract the reconciled transactions to exclude their effect
-            // For negative transactions, this effectively adds them back (canceling their effect)
-            balance = balance - reconciledTotal;
-            console.log(`      ⚠️  Adjusted for reconciled transactions (${reconciledTransactions?.length || 0} transactions, total: ${reconciledTotal.toFixed(2)}): ${balance.toFixed(2)}`);
-          }
-        }
-
         totalFromAccounts += balance;
         accountIds.push(account.id);
-        console.log(`   💵 ${account.name} (${accountType}): $${balance.toFixed(2)} [working_balance - reconciled transactions]`);
+        console.log(`   💵 ${account.name} (${accountType}): $${balance.toFixed(2)} [working_balance]`);
         console.log(`      📊 account_balance: ${(account.account_balance || 0).toFixed(2)}`);
         console.log(`      📊 cleared_balance: ${(account.cleared_balance || 0).toFixed(2)}, uncleared_balance: ${(account.uncleared_balance || 0).toFixed(2)}`);
         console.log(`      📊 working_balance: ${(account.working_balance || 0).toFixed(2)} (before adjustment)`);
@@ -178,10 +155,10 @@ export class ReadyToAssignService {
     return total;
   }
 
-  private async calculateTotalAssignedMoney(supabase: SupabaseClient, budgetId: string, userId: string): Promise<number> {
+  private async calculateTotalCategoryAvailability(supabase: SupabaseClient, budgetId: string, userId: string): Promise<number> {
     const { data: categoryBalances, error } = await supabase
       .from('category_balances')
-      .select('assigned, category_id, year, month')
+      .select('assigned, available, category_id, year, month')
       .eq('budget_id', budgetId)
       .eq('user_id', userId);
 
@@ -199,38 +176,38 @@ export class ReadyToAssignService {
 
     const categoryMap = new Map(categories?.map(c => [c.id, c.name]) || []);
 
-    console.log(`\n📝 ASSIGNED MONEY (Category Balances):`);
+    console.log(`\n📝 CATEGORY BALANCES:`);
     
     // Sum all assigned amounts across all months (including negative ones)
     // Negative assigned amounts represent money moved back to Ready to Assign
-    let totalAssigned = 0;
+    let totalAvailable = 0;
     let positiveCount = 0;
     let negativeCount = 0;
     let zeroCount = 0;
 
     for (const balance of categoryBalances) {
-      const assigned = balance.assigned || 0;
-      totalAssigned += assigned;
+      const available = balance.available || 0;
+      totalAvailable += available;
       
-      if (assigned > 0) positiveCount++;
-      else if (assigned < 0) negativeCount++;
+      if (available > 0) positiveCount++;
+      else if (available < 0) negativeCount++;
       else zeroCount++;
 
-      // Only log non-zero assignments to avoid too much noise
-      if (assigned !== 0) {
+      // Only log non-zero availability to avoid too much noise
+      if (available !== 0) {
         const categoryName = categoryMap.get(balance.category_id) || 'Unknown';
-        console.log(`   ${assigned >= 0 ? '+' : ''}$${assigned.toFixed(2)} - ${categoryName} (${balance.year}/${balance.month})`);
+        console.log(`   ${available >= 0 ? '+' : ''}$${available.toFixed(2)} available - ${categoryName} (${balance.year}/${balance.month}) (assigned: ${(balance.assigned || 0).toFixed(2)})`);
       }
     }
 
     console.log(`   ───────────────────────────────────────────────────────`);
-    console.log(`   Positive assignments: ${positiveCount}`);
-    console.log(`   Negative assignments: ${negativeCount} (money moved back)`);
-    console.log(`   Zero assignments: ${zeroCount}`);
+    console.log(`   Positive availability: ${positiveCount}`);
+    console.log(`   Negative availability: ${negativeCount} (overspent)`);
+    console.log(`   Zero availability: ${zeroCount}`);
     console.log(`   ───────────────────────────────────────────────────────`);
-    console.log(`   ✅ TOTAL ASSIGNED MONEY: $${totalAssigned.toFixed(2)}`);
+    console.log(`   ✅ TOTAL AVAILABLE IN CATEGORIES: $${totalAvailable.toFixed(2)}`);
 
-    return totalAssigned;
+    return totalAvailable;
   }
 
 
