@@ -13,6 +13,7 @@ export interface UserDateContext {
   userMonth: number;
 }
 
+
 /**
  * Helper type for DTOs that may include user date context
  */
