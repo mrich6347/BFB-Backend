@@ -740,8 +740,11 @@ export class TransactionsService {
             );
           } else {
             // For payment categories, manually add back to available
+            // The transaction amount is negative (outflow from cash account)
+            // We need to add back the absolute value to the payment category
+            const amountToAddBack = Math.abs(transaction.amount);
             console.log(`⏭️ Skipping category activity reversal for payment category ${transaction.category_id}`);
-            console.log(`💳 Manually adding back $${transaction.amount} to payment category available`);
+            console.log(`💳 Manually adding back $${amountToAddBack} to payment category available`);
 
             const supabase = this.supabaseService.getAuthenticatedClient(authToken);
             const now = new Date();
@@ -762,7 +765,7 @@ export class TransactionsService {
               await supabase
                 .from('category_balances')
                 .update({
-                  available: (paymentBalance.available || 0) + transaction.amount
+                  available: (paymentBalance.available || 0) + amountToAddBack
                 })
                 .eq('category_id', transaction.category_id)
                 .eq('user_id', userId)
