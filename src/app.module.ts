@@ -10,7 +10,6 @@ import { AccountsModule } from './domains/accounts/accounts.module';
 import { CategoryGroupsModule } from './domains/category-groups/category-groups.module';
 import { CategoriesModule } from './domains/categories/categories.module';
 import { CategoryBalancesModule } from './domains/category-balances/category-balances.module';
-import { DatabaseManagementModule } from './domains/database-management/database-management.module';
 import { TransactionsModule } from './domains/transactions/transactions.module';
 import { AutoAssignModule } from './domains/auto-assign/auto-assign.module';
 import { UserProfilesModule } from './domains/user-profiles/user-profiles.module';
@@ -27,7 +26,6 @@ import { SharedGoalsModule } from './domains/shared-goals/shared-goals.module';
     CategoryGroupsModule,
     CategoriesModule,
     CategoryBalancesModule,
-    DatabaseManagementModule,
     TransactionsModule,
     AutoAssignModule,
     UserProfilesModule,

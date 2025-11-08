@@ -81,11 +81,6 @@ export class YnabTestRunner {
     };
 
     try {
-      // Clean database before starting test
-      console.log('🧹 Cleaning database before test...');
-      await this.cleanDatabase();
-      console.log('✅ Database cleaned\n');
-
       // Execute each step
       let lastStepResult: any = null;
       for (let i = 0; i < scenario.steps.length; i++) {
@@ -573,16 +568,6 @@ export class YnabTestRunner {
     this.userId = data.user.id;
 
     console.log(`✅ Test user authenticated: ${testEmail}`);
-  }
-
-  private async cleanDatabase(): Promise<void> {
-    const response = await request(this.app.getHttpServer())
-      .post('/database-management/nuke')
-      .set('Authorization', `Bearer ${this.authToken}`);
-
-    if (response.status !== 201) {
-      throw new Error(`Failed to clean database: ${response.body.message || 'Unknown error'}`);
-    }
   }
 
   async cleanup() {

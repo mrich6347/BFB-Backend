@@ -196,19 +196,10 @@ const response = await request(this.app.getHttpServer())
 - `/category-groups` - Category group operations
 - `/transactions` - Transaction handling
 - `/main-data/{budgetId}` - Complete application state
-- `/database-management/nuke` - Test database cleanup
 
 ### Database Management
 
 The framework includes sophisticated database management:
-
-#### Database Cleanup
-```typescript
-// Complete database reset before each test
-await request(this.app.getHttpServer())
-  .post('/database-management/nuke')
-  .set('Authorization', `Bearer ${this.authToken}`);
-```
 
 #### State Retrieval
 ```typescript
