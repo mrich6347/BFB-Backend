@@ -100,9 +100,9 @@ export class TransactionsService {
         const targetAccountName = this.parseTransferAccountName(data.payee || '');
         const targetAccount = await this.getAccountByName(targetAccountName, budgetId, userId, authToken);
 
-        // Validate that target is a valid transfer account (CASH or TRACKING)
-        if (targetAccount.account_type !== 'TRACKING' && targetAccount.account_type !== 'CASH') {
-          throw new Error('Transfers are only allowed to cash or tracking accounts');
+        // Validate that target is a valid transfer account (CASH, TRACKING, or CREDIT)
+        if (targetAccount.account_type !== 'TRACKING' && targetAccount.account_type !== 'CASH' && targetAccount.account_type !== 'CREDIT') {
+          throw new Error('Transfers are only allowed to cash, tracking, or credit card accounts');
         }
 
         // Get target account details before transfer
@@ -169,17 +169,23 @@ export class TransactionsService {
           }
 
           // Update category activity for all account types (after credit card logic)
-          await this.updateCategoryActivity(
-            data.category_id,
-            budgetId,
-            data.date,
-            data.amount,
-            userId,
-            authToken,
-            createTransactionDto.userDate,
-            createTransactionDto.userYear,
-            createTransactionDto.userMonth
-          );
+          // Skip activity update for payment categories (they're updated manually)
+          const isPaymentCategory = await this.isPaymentCategory(data.category_id, userId, authToken);
+          if (!isPaymentCategory) {
+            await this.updateCategoryActivity(
+              data.category_id,
+              budgetId,
+              data.date,
+              data.amount,
+              userId,
+              authToken,
+              createTransactionDto.userDate,
+              createTransactionDto.userYear,
+              createTransactionDto.userMonth
+            );
+          } else {
+            console.log(`⏭️ Skipping category activity update for payment category ${data.category_id}`);
+          }
         } catch (activityError) {
           console.error('Error updating category activity:', activityError);
           // Don't throw here - transaction was created successfully, activity update is secondary
@@ -721,14 +727,49 @@ export class TransactionsService {
           );
 
           // For all transactions, do the regular category activity reversal
-          await this.updateCategoryActivity(
-            transaction.category_id,
-            budgetId,
-            transaction.date,
-            -transaction.amount, // Reverse the amount
-            userId,
-            authToken
-          );
+          // Skip activity reversal for payment categories (they're updated manually)
+          const isPaymentCategory = await this.isPaymentCategory(transaction.category_id, userId, authToken);
+          if (!isPaymentCategory) {
+            await this.updateCategoryActivity(
+              transaction.category_id,
+              budgetId,
+              transaction.date,
+              -transaction.amount, // Reverse the amount
+              userId,
+              authToken
+            );
+          } else {
+            // For payment categories, manually add back to available
+            console.log(`⏭️ Skipping category activity reversal for payment category ${transaction.category_id}`);
+            console.log(`💳 Manually adding back $${transaction.amount} to payment category available`);
+
+            const supabase = this.supabaseService.getAuthenticatedClient(authToken);
+            const now = new Date();
+            const currentYear = now.getFullYear();
+            const currentMonth = now.getMonth() + 1;
+
+            const { data: paymentBalance } = await supabase
+              .from('category_balances')
+              .select('available')
+              .eq('category_id', transaction.category_id)
+              .eq('user_id', userId)
+              .eq('year', currentYear)
+              .eq('month', currentMonth)
+              .single();
+
+            if (paymentBalance) {
+              // Add back to payment category available (reverse the payment)
+              await supabase
+                .from('category_balances')
+                .update({
+                  available: (paymentBalance.available || 0) + transaction.amount
+                })
+                .eq('category_id', transaction.category_id)
+                .eq('user_id', userId)
+                .eq('year', currentYear)
+                .eq('month', currentMonth);
+            }
+          }
         } catch (activityError) {
           console.error('Error reversing category activity:', activityError);
           // Don't throw here - we still want to delete the transaction
@@ -1839,6 +1880,27 @@ export class TransactionsService {
     } catch (balanceError) {
       console.error('Error updating linked account balances after deletion:', balanceError);
     }
+  }
+
+  /**
+   * Check if a category is a payment category (ends with " Payment")
+   */
+  private async isPaymentCategory(categoryId: string, userId: string, authToken: string): Promise<boolean> {
+    const supabase = this.supabaseService.getAuthenticatedClient(authToken);
+
+    const { data: category, error } = await supabase
+      .from('categories')
+      .select('name')
+      .eq('id', categoryId)
+      .eq('user_id', userId)
+      .single();
+
+    if (error || !category) {
+      return false;
+    }
+
+    // Payment categories end with " Payment"
+    return category.name.endsWith(' Payment');
   }
 
   private async getAccountDetails(accountId: string, userId: string, authToken: string): Promise<any> {

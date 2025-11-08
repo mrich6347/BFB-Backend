@@ -1,5 +1,5 @@
 import { ConflictException, Injectable } from '@nestjs/common';
-import { AccountResponse, CreateAccountDto, AccountWithReadyToAssignResponse, ReconcileAccountDto, ReconcileAccountResponse, UpdateAccountDto, CloseAccountResponse, ReorderAccountsDto } from './DTO/account.dto';
+import { AccountResponse, CreateAccountDto, AccountWithReadyToAssignResponse, ReconcileAccountDto, ReconcileAccountResponse, UpdateAccountDto, CloseAccountResponse, ReorderAccountsDto, MakeCreditCardPaymentDto, MakeCreditCardPaymentResponse } from './DTO/account.dto';
 import { SupabaseService } from '../../supabase/supabase.service';
 import { SupabaseClient } from '@supabase/supabase-js';
 import { ReadyToAssignService } from '../ready-to-assign/ready-to-assign.service';
@@ -628,6 +628,151 @@ export class AccountsService {
       // Don't throw - account reopen should still succeed even if category move fails
       return null;
     }
+  }
+
+  /**
+   * Make a payment on a credit card account
+   * This creates a transaction that:
+   * 1. Adds money (inflow) to the credit card account (reduces the balance owed)
+   * 2. Deducts money from the corresponding payment category
+   */
+  async makeCreditCardPayment(
+    accountId: string,
+    paymentDto: MakeCreditCardPaymentDto,
+    userId: string,
+    authToken: string
+  ): Promise<MakeCreditCardPaymentResponse> {
+    const supabase = this.supabaseService.getAuthenticatedClient(authToken);
+
+    // Get the credit card account
+    const account = await this.findOne(accountId, userId, authToken);
+
+    // Verify this is a credit card account
+    if (account.account_type !== 'CREDIT') {
+      throw new Error('This operation is only valid for credit card accounts');
+    }
+
+    // Find the payment category for this credit card
+    const paymentCategoryName = `${account.name} Payment`;
+    const { data: paymentCategory, error: paymentCategoryError } = await supabase
+      .from('categories')
+      .select('id, budget_id')
+      .eq('name', paymentCategoryName)
+      .eq('budget_id', account.budget_id)
+      .eq('user_id', userId)
+      .single();
+
+    if (paymentCategoryError || !paymentCategory) {
+      throw new Error(`Payment category '${paymentCategoryName}' not found for this credit card`);
+    }
+
+    // Validate the from_account is a cash account
+    const fromAccount = await this.findOne(paymentDto.from_account_id, userId, authToken);
+    if (fromAccount.account_type !== 'CASH') {
+      throw new Error('Payment can only be made from a cash account');
+    }
+
+    // Create the payment as a transfer transaction
+    // This creates two transactions:
+    // 1. Outflow from cash account (negative amount)
+    // 2. Inflow to credit card account (positive amount)
+    // The payee format "Transfer : AccountName" indicates it's a transfer
+    const transactionResult = await this.transactionsService.create({
+      account_id: paymentDto.from_account_id, // Source account (cash)
+      date: new Date().toISOString().split('T')[0], // Today's date
+      amount: -Math.abs(paymentDto.amount), // Negative amount (outflow from cash account)
+      memo: paymentDto.memo || 'Credit Card Payment',
+      payee: `Transfer : ${account.name}`, // Transfer payee format
+      category_id: paymentCategory.id, // Assign to payment category
+      is_cleared: true,
+      is_reconciled: false
+    }, userId, authToken);
+
+    // Manually update the payment category balance
+    // We only update AVAILABLE - subtract the payment amount
+    // (Activity and Assigned are not touched for payment category operations)
+    const now = new Date();
+    const currentYear = now.getFullYear();
+    const currentMonth = now.getMonth() + 1;
+
+    // Get current payment category balance
+    const { data: currentBalance, error: balanceError } = await supabase
+      .from('category_balances')
+      .select('*')
+      .eq('category_id', paymentCategory.id)
+      .eq('user_id', userId)
+      .eq('year', currentYear)
+      .eq('month', currentMonth)
+      .single();
+
+    if (balanceError && balanceError.code !== 'PGRST116') {
+      console.error('Error fetching payment category balance:', balanceError);
+    }
+
+    // Update the payment category balance - subtract from available only
+    const paymentAmount = Math.abs(paymentDto.amount);
+    const newAvailable = (currentBalance?.available || 0) - paymentAmount;
+
+    let paymentCategoryBalance: any = null;
+    if (currentBalance) {
+      // Update existing balance - only update available
+      const { data: updatedBalance, error: updateError } = await supabase
+        .from('category_balances')
+        .update({
+          available: newAvailable
+        })
+        .eq('category_id', paymentCategory.id)
+        .eq('user_id', userId)
+        .eq('year', currentYear)
+        .eq('month', currentMonth)
+        .select('*')
+        .single();
+
+      if (updateError) {
+        console.error('Error updating payment category balance:', updateError);
+      }
+      paymentCategoryBalance = updatedBalance;
+    } else {
+      // Create new balance with only available set
+      const { data: newBalance, error: createError } = await supabase
+        .from('category_balances')
+        .insert({
+          category_id: paymentCategory.id,
+          budget_id: paymentCategory.budget_id,
+          user_id: userId,
+          year: currentYear,
+          month: currentMonth,
+          assigned: 0,
+          activity: 0,
+          available: -paymentAmount
+        })
+        .select('*')
+        .single();
+
+      if (createError) {
+        console.error('Error creating payment category balance:', createError);
+      }
+      paymentCategoryBalance = newBalance;
+    }
+
+    // Get updated accounts (both source cash account and target credit card account)
+    const updatedCreditCardAccount = await this.findOne(accountId, userId, authToken);
+    const updatedCashAccount = await this.findOne(paymentDto.from_account_id, userId, authToken);
+
+    // Calculate updated Ready to Assign
+    const readyToAssign = await this.readyToAssignService.calculateReadyToAssign(
+      account.budget_id,
+      userId,
+      authToken
+    );
+
+    return {
+      transaction: transactionResult.transaction,
+      account: updatedCreditCardAccount,
+      sourceAccount: updatedCashAccount, // The cash account money came from
+      paymentCategoryBalance: paymentCategoryBalance || null,
+      readyToAssign
+    };
   }
 
 }

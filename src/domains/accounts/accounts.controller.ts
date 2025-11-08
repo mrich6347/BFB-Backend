@@ -1,6 +1,6 @@
 import { Controller, Get, Post, Body, Patch, Param, Delete, Req, UseGuards, ParseUUIDPipe } from '@nestjs/common';
 import { AccountsService } from './accounts.service';
-import { AccountResponse, CreateAccountDto, AccountWithReadyToAssignResponse, ReconcileAccountDto, ReconcileAccountResponse, UpdateAccountDto, CloseAccountResponse, UpdateTrackingBalanceDto, BalanceHistoryPoint, ReorderAccountsDto } from './DTO/account.dto';
+import { AccountResponse, CreateAccountDto, AccountWithReadyToAssignResponse, ReconcileAccountDto, ReconcileAccountResponse, UpdateAccountDto, CloseAccountResponse, UpdateTrackingBalanceDto, BalanceHistoryPoint, ReorderAccountsDto, MakeCreditCardPaymentDto, MakeCreditCardPaymentResponse } from './DTO/account.dto';
 import { AuthService } from '../../configurations/auth/auth.service';
 import { SupabaseAuthGuard } from '../../guards/auth.guard';
 
@@ -85,5 +85,15 @@ export class AccountsController {
   reorder(@Body() reorderDto: ReorderAccountsDto, @Req() req: any): Promise<void> {
     const authToken = this.authService.getAuthToken(req);
     return this.accountsService.reorder(reorderDto, req.user.id, authToken);
+  }
+
+  @Post(':id/make-payment')
+  makeCreditCardPayment(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() paymentDto: MakeCreditCardPaymentDto,
+    @Req() req: any
+  ): Promise<MakeCreditCardPaymentResponse> {
+    const authToken = this.authService.getAuthToken(req);
+    return this.accountsService.makeCreditCardPayment(id, paymentDto, req.user.id, authToken);
   }
 }

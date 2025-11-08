@@ -110,22 +110,47 @@ export class CreditCardDebtService {
 
       console.log(`✅ Created debt tracking record: debt=$${spendingAmount}, covered=$${availableToMove}`);
 
-      // YNAB Logic: Add positive activity to payment category to represent automatic coverage
+      // YNAB Logic: Add to payment category's available balance to represent automatic coverage
       // Only add the amount that was actually covered from the spending category
-      if (availableToMove > 0 && updateCategoryActivityCallback) {
-        await updateCategoryActivityCallback(
-          paymentCategory.id,
-          budgetId,
-          new Date().toISOString().split('T')[0], // Use current date for the automatic movement
-          availableToMove, // Only the covered amount for payment category
-          userId,
-          authToken,
-          undefined, // userCurrentDate
-          userYear,
-          userMonth
-        );
+      // Note: We only update AVAILABLE, not activity or assigned
+      if (availableToMove > 0) {
+        const { data: paymentBalance } = await supabase
+          .from('category_balances')
+          .select('available')
+          .eq('category_id', paymentCategory.id)
+          .eq('user_id', userId)
+          .eq('year', currentYear)
+          .eq('month', currentMonth)
+          .single();
 
-        console.log(`✅ YNAB Credit Card Logic: Added $${availableToMove} activity to '${paymentCategoryName}'`);
+        if (paymentBalance) {
+          // Update existing payment category balance - only update available
+          await supabase
+            .from('category_balances')
+            .update({
+              available: (paymentBalance.available || 0) + availableToMove
+            })
+            .eq('category_id', paymentCategory.id)
+            .eq('user_id', userId)
+            .eq('year', currentYear)
+            .eq('month', currentMonth);
+        } else {
+          // Create new payment category balance - only set available
+          await supabase
+            .from('category_balances')
+            .insert({
+              category_id: paymentCategory.id,
+              budget_id: budgetId,
+              user_id: userId,
+              year: currentYear,
+              month: currentMonth,
+              assigned: 0,
+              activity: 0,
+              available: availableToMove
+            });
+        }
+
+        console.log(`✅ YNAB Credit Card Logic: Added $${availableToMove} to available in '${paymentCategoryName}'`);
       } else {
         console.log(`ℹ️ No money available to cover from category to payment category`);
       }
@@ -212,21 +237,36 @@ export class CreditCardDebtService {
         return;
       }
 
-      // If we have an existing debt record, reverse the original payment category activity
-      if (existingDebtRecord && existingDebtRecord.covered_amount > 0 && updateCategoryActivityCallback) {
-        console.log(`🔄 Reversing original payment category activity: -$${existingDebtRecord.covered_amount}`);
+      // If we have an existing debt record, reverse the original payment category available
+      if (existingDebtRecord && existingDebtRecord.covered_amount > 0) {
+        console.log(`🔄 Reversing original payment category available: -$${existingDebtRecord.covered_amount}`);
 
-        await updateCategoryActivityCallback(
-          paymentCategory.id,
-          budgetId,
-          new Date().toISOString().split('T')[0],
-          -existingDebtRecord.covered_amount, // Negative to reverse
-          userId,
-          authToken,
-          undefined,
+        const { year: currentYear, month: currentMonth } = UserDateContextUtils.getCurrentUserDate({
           userYear,
           userMonth
-        );
+        });
+
+        const { data: paymentBalance } = await supabase
+          .from('category_balances')
+          .select('available')
+          .eq('category_id', paymentCategory.id)
+          .eq('user_id', userId)
+          .eq('year', currentYear)
+          .eq('month', currentMonth)
+          .single();
+
+        if (paymentBalance) {
+          // Update existing payment category balance - only update available
+          await supabase
+            .from('category_balances')
+            .update({
+              available: (paymentBalance.available || 0) - existingDebtRecord.covered_amount
+            })
+            .eq('category_id', paymentCategory.id)
+            .eq('user_id', userId)
+            .eq('year', currentYear)
+            .eq('month', currentMonth);
+        }
       }
 
       // If the new transaction is spending, apply new credit card logic
@@ -262,21 +302,46 @@ export class CreditCardDebtService {
 
         console.log(`💳 New credit card spending: $${newSpendingAmount}, available to move: $${availableToMove}`);
 
-        // Apply new payment category activity - only add the amount that was covered
-        if (availableToMove > 0 && updateCategoryActivityCallback) {
-          await updateCategoryActivityCallback(
-            paymentCategory.id,
-            budgetId,
-            new Date().toISOString().split('T')[0],
-            availableToMove, // Only the covered amount for payment category
-            userId,
-            authToken,
-            undefined,
-            userYear,
-            userMonth
-          );
+        // Apply new payment category available - only add the amount that was covered
+        // Note: We only update AVAILABLE, not activity or assigned
+        if (availableToMove > 0) {
+          const { data: paymentBalance } = await supabase
+            .from('category_balances')
+            .select('available')
+            .eq('category_id', paymentCategory.id)
+            .eq('user_id', userId)
+            .eq('year', currentYear)
+            .eq('month', currentMonth)
+            .single();
 
-          console.log(`✅ YNAB Credit Card Logic Update: Added $${availableToMove} activity to '${paymentCategoryName}'`);
+          if (paymentBalance) {
+            // Update existing payment category balance - only update available
+            await supabase
+              .from('category_balances')
+              .update({
+                available: (paymentBalance.available || 0) + availableToMove
+              })
+              .eq('category_id', paymentCategory.id)
+              .eq('user_id', userId)
+              .eq('year', currentYear)
+              .eq('month', currentMonth);
+          } else {
+            // Create new payment category balance - only set available
+            await supabase
+              .from('category_balances')
+              .insert({
+                category_id: paymentCategory.id,
+                budget_id: budgetId,
+                user_id: userId,
+                year: currentYear,
+                month: currentMonth,
+                assigned: 0,
+                activity: 0,
+                available: availableToMove
+              });
+          }
+
+          console.log(`✅ YNAB Credit Card Logic Update: Added $${availableToMove} to available in '${paymentCategoryName}'`);
         } else {
           console.log(`ℹ️ No money available to cover from category to payment category`);
         }
@@ -409,20 +474,38 @@ export class CreditCardDebtService {
         return;
       }
 
-      // Reverse the payment category activity based on covered amount
-      if (existingDebtRecord.covered_amount > 0 && updateCategoryActivityCallback) {
-        console.log(`🔄 Reversing payment category activity for deletion: -$${existingDebtRecord.covered_amount}`);
+      // Reverse the payment category available based on covered amount
+      // Note: We only update AVAILABLE, not activity or assigned
+      if (existingDebtRecord.covered_amount > 0) {
+        console.log(`🔄 Reversing payment category available for deletion: -$${existingDebtRecord.covered_amount}`);
 
-        await updateCategoryActivityCallback(
-          paymentCategory.id,
-          budgetId,
-          new Date().toISOString().split('T')[0],
-          -existingDebtRecord.covered_amount, // Negative to reverse
-          userId,
-          authToken
-        );
+        const now = new Date();
+        const currentYear = now.getFullYear();
+        const currentMonth = now.getMonth() + 1;
 
-        console.log(`✅ YNAB Credit Card Logic Deletion: Removed $${existingDebtRecord.covered_amount} activity from '${paymentCategoryName}'`);
+        const { data: paymentBalance } = await supabase
+          .from('category_balances')
+          .select('available')
+          .eq('category_id', paymentCategory.id)
+          .eq('user_id', userId)
+          .eq('year', currentYear)
+          .eq('month', currentMonth)
+          .single();
+
+        if (paymentBalance) {
+          // Update existing payment category balance - only update available
+          await supabase
+            .from('category_balances')
+            .update({
+              available: (paymentBalance.available || 0) - existingDebtRecord.covered_amount
+            })
+            .eq('category_id', paymentCategory.id)
+            .eq('user_id', userId)
+            .eq('year', currentYear)
+            .eq('month', currentMonth);
+        }
+
+        console.log(`✅ YNAB Credit Card Logic Deletion: Removed $${existingDebtRecord.covered_amount} from available in '${paymentCategoryName}'`);
       }
 
       // Delete the debt tracking record
@@ -535,10 +618,11 @@ export class CreditCardDebtService {
           // The assignment already happened in pullFromReadyToAssign, and the credit card logic
           // is just moving the coverage to the payment category without affecting the spending category
 
-          // 2. Add activity to the payment category (represents automatic coverage)
+          // 2. Add to payment category's available (represents automatic coverage)
+          // Note: We only update AVAILABLE, not activity or assigned
           const { data: paymentBalance } = await supabase
             .from('category_balances')
-            .select('activity, available')
+            .select('available')
             .eq('category_id', paymentCategory.id)
             .eq('user_id', userId)
             .eq('year', year)
@@ -546,11 +630,10 @@ export class CreditCardDebtService {
             .single();
 
           if (paymentBalance) {
-            // Update existing payment category balance
+            // Update existing payment category balance - only update available
             await supabase
               .from('category_balances')
               .update({
-                activity: (paymentBalance.activity || 0) + amountToMove,
                 available: (paymentBalance.available || 0) + amountToMove
               })
               .eq('category_id', paymentCategory.id)
@@ -558,7 +641,7 @@ export class CreditCardDebtService {
               .eq('year', year)
               .eq('month', month);
           } else {
-            // Create new payment category balance
+            // Create new payment category balance - only set available
             await supabase
               .from('category_balances')
               .insert({
@@ -568,7 +651,7 @@ export class CreditCardDebtService {
                 year: year,
                 month: month,
                 assigned: 0,
-                activity: amountToMove,
+                activity: 0,
                 available: amountToMove
               });
           }

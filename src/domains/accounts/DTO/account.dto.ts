@@ -92,3 +92,24 @@ export class ReorderAccountsDto {
     @IsNotEmpty()
     account_ids: string[];
 }
+
+export class MakeCreditCardPaymentDto {
+    @Transform(({ value }) => parseFloat(value))
+    @IsNumber()
+    amount: number;
+
+    @IsUUID('4')
+    from_account_id: string;
+
+    @IsString()
+    @IsOptional()
+    memo?: string;
+}
+
+export class MakeCreditCardPaymentResponse {
+    transaction: any; // TransactionResponse type from transactions module
+    account: AccountResponse; // The credit card account
+    sourceAccount: AccountResponse; // The cash account money came from
+    paymentCategoryBalance: any; // CategoryBalanceResponse type from categories module
+    readyToAssign: number;
+}
