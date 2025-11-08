@@ -1,4 +1,4 @@
-import { IsString, IsNumber, IsBoolean, IsOptional, IsUUID, IsDateString } from 'class-validator';
+import { IsString, IsNumber, IsBoolean, IsOptional, IsUUID, IsDateString, IsArray } from 'class-validator';
 import { WithUserDateContext } from '../../../common/interfaces/user-date-context.interface';
 
 export class CreateTransactionDto implements WithUserDateContext {
@@ -158,4 +158,16 @@ export class TransactionWithAccountsAndReadyToAssignAndCategoryBalanceResponse {
   readyToAssign: number;
   categoryBalance?: any; // CategoryBalanceResponse from category-balances module (deprecated, use categoryBalances)
   categoryBalances?: any[]; // Array of CategoryBalanceResponse from category-balances module
+}
+
+export class BulkDeleteTransactionsDto {
+  @IsArray()
+  @IsUUID('4', { each: true })
+  transaction_ids: string[];
+}
+
+export class BulkDeleteTransactionsResponse {
+  deletedCount: number;
+  affectedAccounts: any[]; // Array of AccountResponse from accounts module
+  readyToAssign: number;
 }

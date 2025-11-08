@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { SupabaseClient } from '@supabase/supabase-js';
 import { SupabaseService } from '../../supabase/supabase.service';
-import { CreateTransactionDto, UpdateTransactionDto, TransactionResponse, TransactionWithAccountsResponse, TransactionDeleteResponse, TransactionDeleteWithReadyToAssignResponse, TransactionWithReadyToAssignAndCategoryBalanceResponse, TransactionWithAccountsAndReadyToAssignAndCategoryBalanceResponse } from './dto/transaction.dto';
+import { CreateTransactionDto, UpdateTransactionDto, TransactionResponse, TransactionWithAccountsResponse, TransactionDeleteResponse, TransactionDeleteWithReadyToAssignResponse, TransactionWithReadyToAssignAndCategoryBalanceResponse, TransactionWithAccountsAndReadyToAssignAndCategoryBalanceResponse, BulkDeleteTransactionsResponse } from './dto/transaction.dto';
 import { CategoryBalancesService } from '../category-balances/category-balances.service';
 import { CategoryReadService } from '../categories/services/read/category-read.service';
 import { UserDateContextUtils } from '../../common/interfaces/user-date-context.interface';
@@ -796,6 +796,210 @@ export class TransactionsService {
 
     // For non-transfer transactions, return basic response
     return {
+      readyToAssign
+    };
+  }
+
+  /**
+   * Bulk delete multiple transactions efficiently
+   * This method batches balance updates per account for better performance
+   */
+  async bulkRemove(transactionIds: string[], userId: string, authToken: string): Promise<BulkDeleteTransactionsResponse> {
+    const supabase = this.supabaseService.getAuthenticatedClient(authToken);
+
+    if (!transactionIds || transactionIds.length === 0) {
+      throw new Error('No transaction IDs provided');
+    }
+
+    console.log(`🗑️ Bulk deleting ${transactionIds.length} transactions for user: ${userId}`);
+
+    // Fetch all transactions to be deleted
+    const { data: transactions, error: fetchError } = await supabase
+      .from('transactions')
+      .select('*')
+      .in('id', transactionIds)
+      .eq('user_id', userId);
+
+    if (fetchError) {
+      throw new Error(fetchError.message);
+    }
+
+    if (!transactions || transactions.length === 0) {
+      throw new Error('No transactions found to delete');
+    }
+
+    console.log(`📋 Found ${transactions.length} transactions to delete`);
+
+    // Group transactions by account for efficient balance updates
+    const transactionsByAccount = new Map<string, any[]>();
+    const transferTransactionIds = new Set<string>();
+    const linkedAccountIds = new Set<string>();
+
+    for (const transaction of transactions) {
+      if (!transactionsByAccount.has(transaction.account_id)) {
+        transactionsByAccount.set(transaction.account_id, []);
+      }
+      transactionsByAccount.get(transaction.account_id)!.push(transaction);
+
+      // Track transfer transactions
+      if (transaction.transfer_id) {
+        transferTransactionIds.add(transaction.transfer_id);
+      }
+    }
+
+    // Find and delete linked transfer transactions
+    if (transferTransactionIds.size > 0) {
+      const { data: linkedTransactions } = await supabase
+        .from('transactions')
+        .select('*')
+        .in('transfer_id', Array.from(transferTransactionIds))
+        .eq('user_id', userId)
+        .not('id', 'in', `(${transactionIds.join(',')})`);
+
+      if (linkedTransactions && linkedTransactions.length > 0) {
+        console.log(`🔗 Found ${linkedTransactions.length} linked transfer transactions to delete`);
+
+        // Group linked transactions by account
+        for (const linkedTx of linkedTransactions) {
+          if (!transactionsByAccount.has(linkedTx.account_id)) {
+            transactionsByAccount.set(linkedTx.account_id, []);
+          }
+          transactionsByAccount.get(linkedTx.account_id)!.push(linkedTx);
+          linkedAccountIds.add(linkedTx.account_id);
+          transactionIds.push(linkedTx.id); // Add to deletion list
+        }
+      }
+    }
+
+    // Reverse category activity for all transactions
+    const budgetIds = new Set<string>();
+    for (const transaction of transactions) {
+      const wasReadyToAssign = transaction.category_id === null;
+      if (transaction.category_id && transaction.amount !== 0 && !wasReadyToAssign) {
+        const budgetId = await this.getBudgetIdFromAccount(transaction.account_id, userId, authToken);
+        if (budgetId) {
+          budgetIds.add(budgetId);
+          try {
+            await this.creditCardDebtService.handleCreditCardTransactionDeletion(
+              transaction.id,
+              transaction.account_id,
+              transaction,
+              budgetId,
+              userId,
+              authToken,
+              this.updateCategoryActivity.bind(this)
+            );
+
+            await this.updateCategoryActivity(
+              transaction.category_id,
+              budgetId,
+              transaction.date,
+              -transaction.amount,
+              userId,
+              authToken
+            );
+          } catch (activityError) {
+            console.error('Error reversing category activity:', activityError);
+          }
+        }
+      }
+    }
+
+    // Delete all transactions in one query
+    const { error: deleteError } = await supabase
+      .from('transactions')
+      .delete()
+      .in('id', transactionIds)
+      .eq('user_id', userId);
+
+    if (deleteError) {
+      console.error(`❌ Error bulk deleting transactions:`, deleteError);
+      throw new Error(deleteError.message);
+    }
+
+    console.log(`✅ Successfully deleted ${transactionIds.length} transactions`);
+
+    // Update balances for each affected account (batched by account)
+    const affectedAccountIds = Array.from(transactionsByAccount.keys());
+    console.log(`🔄 Updating balances for ${affectedAccountIds.length} affected accounts`);
+
+    for (const [accountId, accountTransactions] of transactionsByAccount.entries()) {
+      try {
+        // Calculate total balance change for this account
+        let clearedDelta = 0;
+        let unclearedDelta = 0;
+
+        for (const tx of accountTransactions) {
+          if (tx.is_cleared) {
+            clearedDelta -= tx.amount;
+          } else {
+            unclearedDelta -= tx.amount;
+          }
+        }
+
+        // Apply the batched balance update
+        if (clearedDelta !== 0 || unclearedDelta !== 0) {
+          const { data: account, error: accountError } = await supabase
+            .from('accounts')
+            .select('cleared_balance, uncleared_balance')
+            .eq('id', accountId)
+            .eq('user_id', userId)
+            .single();
+
+          if (accountError) {
+            console.error(`Error fetching account ${accountId}:`, accountError);
+            continue;
+          }
+
+          const currentCleared = this.toNumber(account.cleared_balance);
+          const currentUncleared = this.toNumber(account.uncleared_balance);
+
+          const nextCleared = this.roundToTwoDecimals(currentCleared + clearedDelta);
+          const nextUncleared = this.roundToTwoDecimals(currentUncleared + unclearedDelta);
+          const nextWorking = this.roundToTwoDecimals(nextCleared + nextUncleared);
+
+          await supabase
+            .from('accounts')
+            .update({
+              cleared_balance: nextCleared,
+              uncleared_balance: nextUncleared,
+              working_balance: nextWorking
+            })
+            .eq('id', accountId)
+            .eq('user_id', userId);
+
+          console.log(`✅ Updated account ${accountId}: clearedDelta=${clearedDelta}, unclearedDelta=${unclearedDelta}`);
+        }
+      } catch (balanceError) {
+        console.error(`Error updating balances for account ${accountId}:`, balanceError);
+      }
+    }
+
+    // Get updated account details for all affected accounts
+    const affectedAccounts: any[] = [];
+    for (const accountId of affectedAccountIds) {
+      try {
+        const accountDetails = await this.getAccountDetails(accountId, userId, authToken);
+        affectedAccounts.push(accountDetails);
+      } catch (error) {
+        console.error(`Error fetching account details for ${accountId}:`, error);
+      }
+    }
+
+    // Calculate ready to assign (use first budget ID found)
+    let readyToAssign = 0;
+    const budgetId = budgetIds.values().next().value || await this.getBudgetIdFromAccount(affectedAccountIds[0], userId, authToken);
+    if (budgetId) {
+      try {
+        readyToAssign = await this.readyToAssignService.calculateReadyToAssign(budgetId, userId, authToken);
+      } catch (error) {
+        console.error('Error calculating ready to assign:', error);
+      }
+    }
+
+    return {
+      deletedCount: transactions.length,
+      affectedAccounts,
       readyToAssign
     };
   }

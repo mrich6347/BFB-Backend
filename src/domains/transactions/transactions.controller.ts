@@ -1,6 +1,6 @@
 import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards, Req, Query, ParseUUIDPipe } from '@nestjs/common';
 import { TransactionsService } from './transactions.service';
-import { CreateTransactionDto, UpdateTransactionDto, TransactionResponse, TransactionWithAccountsResponse, TransactionDeleteResponse, TransactionWithReadyToAssignResponse, TransactionWithAccountsAndReadyToAssignResponse, TransactionDeleteWithReadyToAssignResponse } from './dto/transaction.dto';
+import { CreateTransactionDto, UpdateTransactionDto, TransactionResponse, TransactionWithAccountsResponse, TransactionDeleteResponse, TransactionWithReadyToAssignResponse, TransactionWithAccountsAndReadyToAssignResponse, TransactionDeleteWithReadyToAssignResponse, BulkDeleteTransactionsDto, BulkDeleteTransactionsResponse } from './dto/transaction.dto';
 import { SupabaseAuthGuard } from '../../guards/auth.guard';
 import { AuthService } from '../../configurations/auth/auth.service';
 
@@ -53,5 +53,11 @@ export class TransactionsController {
   async remove(@Param('id', ParseUUIDPipe) id: string, @Req() req: any): Promise<TransactionDeleteWithReadyToAssignResponse> {
     const authToken = this.authService.getAuthToken(req);
     return this.transactionsService.remove(id, req.user.id, authToken);
+  }
+
+  @Post('bulk-delete')
+  async bulkRemove(@Body() bulkDeleteDto: BulkDeleteTransactionsDto, @Req() req: any): Promise<BulkDeleteTransactionsResponse> {
+    const authToken = this.authService.getAuthToken(req);
+    return this.transactionsService.bulkRemove(bulkDeleteDto.transaction_ids, req.user.id, authToken);
   }
 }
