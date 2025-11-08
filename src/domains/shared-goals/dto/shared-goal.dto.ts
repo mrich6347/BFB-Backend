@@ -48,6 +48,10 @@ export class CreateSharedGoalDto {
   @IsDateString()
   @IsOptional()
   target_date?: string;
+
+  @IsUUID()
+  @IsNotEmpty()
+  budget_id: string;
 }
 
 export class UpdateSharedGoalDto {

@@ -36,8 +36,11 @@ export class SharedGoalsService {
       throw new NotFoundException('User profile not found. Please create a profile first.');
     }
 
+    // Extract budget_id from DTO as it's not part of the shared_goals table
+    const { budget_id, ...goalData } = createSharedGoalDto;
+
     const payload = {
-      ...createSharedGoalDto,
+      ...goalData,
       created_by: userProfile.id,
       status: GoalStatus.ACTIVE,
     };
@@ -56,8 +59,8 @@ export class SharedGoalsService {
       throw new Error(error.message);
     }
 
-    // Automatically add creator as participant
-    await this.addCreatorAsParticipant(data.id, userProfile.id, userId, authToken);
+    // Automatically add creator as participant with the specified budget
+    await this.addCreatorAsParticipant(data.id, userProfile.id, createSharedGoalDto.budget_id, authToken);
 
     // Fetch the complete goal data with participants to return
     const completeGoal = await this.findById(data.id, userId, authToken);
@@ -348,25 +351,13 @@ export class SharedGoalsService {
     return this.progressCalculationService.getGoalWithProgress(goalId, userId, authToken);
   }
 
-  private async addCreatorAsParticipant(goalId: string, userProfileId: string, userId: string, authToken: string): Promise<void> {
+  private async addCreatorAsParticipant(goalId: string, userProfileId: string, budgetId: string, authToken: string): Promise<void> {
     const supabase = this.supabaseService.getAuthenticatedClient(authToken);
-
-    // Get user's first budget to use as default
-    const { data: budget, error: budgetError } = await supabase
-      .from('budgets')
-      .select('id')
-      .eq('user_id', userId)
-      .limit(1)
-      .single();
-
-    if (budgetError || !budget) {
-      throw new NotFoundException('User must have at least one budget to create a goal');
-    }
 
     const participantData = {
       goal_id: goalId,
       user_profile_id: userProfileId,
-      budget_id: budget.id,
+      budget_id: budgetId,
       joined_at: new Date().toISOString(),
     };
 
