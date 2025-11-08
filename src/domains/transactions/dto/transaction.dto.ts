@@ -153,6 +153,7 @@ export class TransactionWithReadyToAssignAndCategoryBalanceResponse {
 
 export class TransactionWithAccountsAndReadyToAssignAndCategoryBalanceResponse {
   transaction: TransactionResponse;
+  linkedTransaction?: TransactionResponse; // The linked transfer transaction
   sourceAccount?: any; // AccountResponse from accounts module
   targetAccount?: any; // AccountResponse from accounts module
   readyToAssign: number;

@@ -32,10 +32,8 @@ export class TransactionsService {
     // Handle special "ready-to-assign" category
     const isReadyToAssign = createTransactionDto.category_id === 'ready-to-assign';
 
-    // For transfers, validate that we have a category (cash account requirement)
-    if (isTransfer && !createTransactionDto.category_id) {
-      throw new Error('Transfer from cash account requires a category selection');
-    }
+    // Track the linked transaction for transfers
+    let linkedTransaction: TransactionResponse | undefined = undefined;
 
     // Generate transfer_id for transfers
     const transferId = isTransfer ? uuidv4() : createTransactionDto.transfer_id;
@@ -105,6 +103,16 @@ export class TransactionsService {
           throw new Error('Transfers are only allowed to cash, tracking, or credit card accounts');
         }
 
+        // Validate category requirement based on account types
+        // Category is required only when transferring from CASH to TRACKING (money leaving budget)
+        const sourceAccountType = sourceAccountBefore.account_type;
+        const targetAccountType = targetAccount.account_type;
+        const requiresCategory = sourceAccountType === 'CASH' && targetAccountType === 'TRACKING';
+
+        if (requiresCategory && !data.category_id) {
+          throw new Error('Transfer from cash account to tracking account requires a category selection');
+        }
+
         // Get target account details before transfer
         const targetAccountBefore = await this.getAccountDetails(targetAccount.id, userId, authToken);
         console.log('💰 Target Account BEFORE Transfer:', {
@@ -124,8 +132,8 @@ export class TransactionsService {
           willCreateTargetTransactionWith: Math.abs(data.amount)
         });
 
-        // Create the linked transfer transaction
-        await this.createTransferTransaction(data, targetAccount.id, targetAccountName, userId, authToken);
+        // Create the linked transfer transaction and store it for the response
+        linkedTransaction = await this.createTransferTransaction(data, targetAccount.id, targetAccountName, userId, authToken);
       } catch (transferError) {
         console.error('Error creating transfer transaction:', transferError);
         // If transfer creation fails, we should delete the source transaction to maintain consistency
@@ -280,7 +288,7 @@ export class TransactionsService {
       }
     }
 
-    // For transfer transactions, return both account balances
+    // For transfer transactions, return both account balances and linked transaction
     if (isTransfer) {
       try {
         if (budgetId) {
@@ -292,6 +300,7 @@ export class TransactionsService {
 
           return {
             transaction: data,
+            linkedTransaction: linkedTransaction, // Include the linked transaction for optimistic updates
             sourceAccount: sourceAccountDetails,
             targetAccount: targetAccountDetails,
             readyToAssign,
