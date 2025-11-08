@@ -156,14 +156,50 @@ export class ReadyToAssignService {
   }
 
   private async calculateTotalCategoryAvailability(supabase: SupabaseClient, budgetId: string, userId: string): Promise<number> {
-    const { data: categoryBalances, error } = await supabase
+    const now = new Date();
+    const currentYear = now.getUTCFullYear();
+    const currentMonth = now.getUTCMonth() + 1;
+    let targetYear = currentYear;
+    let targetMonth = currentMonth;
+
+    let { data: categoryBalances, error } = await supabase
       .from('category_balances')
       .select('assigned, available, category_id, year, month')
       .eq('budget_id', budgetId)
-      .eq('user_id', userId);
+      .eq('user_id', userId)
+      .eq('year', currentYear)
+      .eq('month', currentMonth);
 
     if (error) {
       throw new Error(error.message);
+    }
+
+    if (!categoryBalances || categoryBalances.length === 0) {
+      const { data: latestMonth } = await supabase
+        .from('category_balances')
+        .select('year, month')
+        .eq('budget_id', budgetId)
+        .eq('user_id', userId)
+        .order('year', { ascending: false })
+        .order('month', { ascending: false })
+        .limit(1);
+
+      if (latestMonth && latestMonth.length > 0) {
+        const { year: fallbackYear, month: fallbackMonth } = latestMonth[0];
+        targetYear = fallbackYear;
+        targetMonth = fallbackMonth;
+        const fallbackResult = await supabase
+          .from('category_balances')
+          .select('assigned, available, category_id, year, month')
+          .eq('budget_id', budgetId)
+          .eq('user_id', userId)
+          .eq('year', fallbackYear)
+          .eq('month', fallbackMonth);
+
+        categoryBalances = fallbackResult.data || [];
+      } else {
+        categoryBalances = [];
+      }
     }
 
     // Get category names for better logging
@@ -176,23 +212,27 @@ export class ReadyToAssignService {
 
     const categoryMap = new Map(categories?.map(c => [c.id, c.name]) || []);
 
-    console.log(`\n📝 CATEGORY BALANCES:`);
+    console.log(`\n📝 CATEGORY BALANCES (for ${targetYear}/${targetMonth}):`);
     
     // Sum all assigned amounts across all months (including negative ones)
     // Negative assigned amounts represent money moved back to Ready to Assign
-    let totalAvailable = 0;
+    let totalPositiveAvailability = 0;
+    let totalOverspent = 0;
     let positiveCount = 0;
     let negativeCount = 0;
     let zeroCount = 0;
 
     for (const balance of categoryBalances) {
       const available = balance.available || 0;
-      totalAvailable += available;
-      
-      if (available > 0) positiveCount++;
-      else if (available < 0) negativeCount++;
-      else zeroCount++;
-
+      if (available > 0) {
+        positiveCount++;
+        totalPositiveAvailability += available;
+      } else if (available < 0) {
+        negativeCount++;
+        totalOverspent += Math.abs(available);
+      } else {
+        zeroCount++;
+      }
       // Only log non-zero availability to avoid too much noise
       if (available !== 0) {
         const categoryName = categoryMap.get(balance.category_id) || 'Unknown';
@@ -201,13 +241,16 @@ export class ReadyToAssignService {
     }
 
     console.log(`   ───────────────────────────────────────────────────────`);
-    console.log(`   Positive availability: ${positiveCount}`);
-    console.log(`   Negative availability: ${negativeCount} (overspent)`);
+    console.log(`   Positive availability: ${positiveCount} (total $${totalPositiveAvailability.toFixed(2)})`);
+    console.log(`   Negative availability: ${negativeCount} (overspent $${totalOverspent.toFixed(2)})`);
     console.log(`   Zero availability: ${zeroCount}`);
     console.log(`   ───────────────────────────────────────────────────────`);
-    console.log(`   ✅ TOTAL AVAILABLE IN CATEGORIES: $${totalAvailable.toFixed(2)}`);
+    console.log(`   ✅ TOTAL AVAILABLE IN CATEGORIES: $${totalPositiveAvailability.toFixed(2)}`);
+    if (totalOverspent > 0) {
+      console.log(`   ❗️ Overspending detected: $${totalOverspent.toFixed(2)} (already reflected in account balances)`);
+    }
 
-    return totalAvailable;
+    return totalPositiveAvailability;
   }
 
 

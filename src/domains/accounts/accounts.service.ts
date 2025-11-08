@@ -445,8 +445,8 @@ export class AccountsService {
     // If source is CASH, include CASH, TRACKING, and CREDIT accounts
     // Otherwise, include TRACKING and CREDIT accounts (existing behavior)
     const accountTypes = sourceAccount.account_type === 'CASH'
-      ? ['CASH', 'TRACKING', 'CREDIT']
-      : ['TRACKING', 'CREDIT'];
+      ? ['CASH', 'TRACKING']
+      : ['TRACKING'];
 
     // Get eligible accounts in the same budget
     const { data, error } = await supabase
