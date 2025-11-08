@@ -449,6 +449,7 @@ export class CreditCardDebtService {
    * 1. Check for uncovered credit card debt for this category
    * 2. Automatically move assigned money to corresponding payment categories
    * 3. Update debt tracking records
+   * Returns array of payment category IDs that were affected
    */
   async handleCreditCardLogicForAssignments(
     appliedCategories: { category_id: string; amount: number }[],
@@ -457,10 +458,12 @@ export class CreditCardDebtService {
     authToken: string,
     year: number,
     month: number
-  ): Promise<void> {
+  ): Promise<string[]> {
     const supabase = this.supabaseService.getAuthenticatedClient(authToken);
 
     console.log(`🔍 YNAB Credit Card Assignment Logic: Checking ${appliedCategories.length} categories for credit card debt`);
+
+    const affectedPaymentCategoryIds: string[] = [];
 
     try {
       for (const appliedCategory of appliedCategories) {
@@ -580,6 +583,11 @@ export class CreditCardDebtService {
 
           console.log(`✅ YNAB Credit Card Assignment Logic: Moved $${amountToMove} to '${paymentCategoryName}', updated debt coverage`);
 
+          // Track the affected payment category
+          if (!affectedPaymentCategoryIds.includes(paymentCategory.id)) {
+            affectedPaymentCategoryIds.push(paymentCategory.id);
+          }
+
           // Reduce the remaining amount to assign for this category
           appliedCategory.amount -= amountToMove;
 
@@ -592,5 +600,7 @@ export class CreditCardDebtService {
       console.error('Error handling credit card logic for assignments:', error);
       // Don't throw - this is supplementary logic, main assignment should still succeed
     }
+
+    return affectedPaymentCategoryIds;
   }
 }

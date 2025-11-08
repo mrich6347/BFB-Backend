@@ -21,7 +21,7 @@ export class CategoryMoneyMovementWriteService {
     month: number,
     userId: string,
     authToken: string
-  ): Promise<{ readyToAssign: number; sourceCategoryBalance: any; destinationCategoryBalance: any }> {
+  ): Promise<{ readyToAssign: number; sourceCategoryBalance: any; destinationCategoryBalance: any; affectedCategoryBalances?: any[] }> {
     const supabase = this.supabaseService.getAuthenticatedClient(authToken);
 
     // Validate that both categories exist and belong to the user
@@ -137,6 +137,18 @@ export class CategoryMoneyMovementWriteService {
       }
     }
 
+    // Handle YNAB-style credit card logic after successful money movement
+    // This ensures that if money is moved to a category with uncovered credit card debt,
+    // the appropriate amount is automatically moved to the payment category
+    const affectedPaymentCategoryIds = await this.creditCardDebtService.handleCreditCardLogicForAssignments(
+      [{ category_id: destinationCategoryId, amount: amount }],
+      sourceBudgetId,
+      userId,
+      authToken,
+      year,
+      month
+    );
+
     // Calculate updated Ready to Assign (should remain the same since we're just moving between categories)
     const readyToAssign = await this.readyToAssignService.calculateReadyToAssign(
       sourceBudgetId,
@@ -172,10 +184,27 @@ export class CategoryMoneyMovementWriteService {
       throw new Error(destinationBalanceError.message);
     }
 
+    // Get the affected payment category balances if any
+    let affectedCategoryBalances: any[] = [];
+    if (affectedPaymentCategoryIds.length > 0) {
+      const { data: paymentBalances, error: paymentBalancesError } = await supabase
+        .from('category_balances')
+        .select('*')
+        .in('category_id', affectedPaymentCategoryIds)
+        .eq('user_id', userId)
+        .eq('year', year)
+        .eq('month', month);
+
+      if (!paymentBalancesError && paymentBalances) {
+        affectedCategoryBalances = paymentBalances;
+      }
+    }
+
     return {
       readyToAssign,
       sourceCategoryBalance: updatedSourceBalance,
-      destinationCategoryBalance: updatedDestinationBalance
+      destinationCategoryBalance: updatedDestinationBalance,
+      affectedCategoryBalances
     };
   }
 
@@ -405,7 +434,7 @@ export class CategoryMoneyMovementWriteService {
     }
 
     // Handle YNAB-style credit card logic after successful assignment
-    await this.creditCardDebtService.handleCreditCardLogicForAssignments(
+    const affectedPaymentCategoryIds = await this.creditCardDebtService.handleCreditCardLogicForAssignments(
       [{ category_id: destinationCategoryId, amount: amount }],
       category.budget_id,
       userId,
@@ -413,6 +442,22 @@ export class CategoryMoneyMovementWriteService {
       year,
       month
     );
+
+    // Get the affected payment category balances if any
+    let affectedCategoryBalances: any[] = [];
+    if (affectedPaymentCategoryIds.length > 0) {
+      const { data: paymentBalances, error: paymentBalancesError } = await supabase
+        .from('category_balances')
+        .select('*')
+        .in('category_id', affectedPaymentCategoryIds)
+        .eq('user_id', userId)
+        .eq('year', year)
+        .eq('month', month);
+
+      if (!paymentBalancesError && paymentBalances) {
+        affectedCategoryBalances = paymentBalances;
+      }
+    }
 
     // Return category with default balance values (frontend will merge with actual balances)
     const categoryResponse: CategoryResponse = {
@@ -425,7 +470,8 @@ export class CategoryMoneyMovementWriteService {
     return {
       readyToAssign,
       category: categoryResponse,
-      categoryBalance: updatedBalance
+      categoryBalance: updatedBalance,
+      affectedCategoryBalances
     };
   }
 }

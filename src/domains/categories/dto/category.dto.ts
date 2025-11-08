@@ -126,10 +126,12 @@ export class CategoryUpdateWithAffectedCategoriesResponse {
   category: CategoryResponse; // The updated category data
   categoryBalance: CategoryBalanceResponse; // The updated balance
   affectedCategories?: CategoryResponse[]; // Payment categories that were updated due to debt coverage
+  affectedCategoryBalances?: CategoryBalanceResponse[]; // Payment category balances that were updated due to debt coverage
 }
 
 export class MoveMoneyResponse {
   readyToAssign: number;
   sourceCategoryBalance: CategoryBalanceResponse;
   destinationCategoryBalance: CategoryBalanceResponse;
+  affectedCategoryBalances?: CategoryBalanceResponse[]; // Payment categories that were updated due to credit card debt coverage
 }
