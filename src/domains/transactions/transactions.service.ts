@@ -105,11 +105,12 @@ export class TransactionsService {
 
         // Validate category requirement based on account types
         // Category is required only when transferring from CASH to TRACKING (money leaving budget)
+        // Note: "ready-to-assign" is stored as null in category_id but isReadyToAssign flag is true
         const sourceAccountType = sourceAccountBefore.account_type;
         const targetAccountType = targetAccount.account_type;
         const requiresCategory = sourceAccountType === 'CASH' && targetAccountType === 'TRACKING';
 
-        if (requiresCategory && !data.category_id) {
+        if (requiresCategory && !data.category_id && !isReadyToAssign) {
           throw new Error('Transfer from cash account to tracking account requires a category selection');
         }
 
