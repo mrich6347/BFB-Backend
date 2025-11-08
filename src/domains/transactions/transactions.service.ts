@@ -187,17 +187,18 @@ export class TransactionsService {
       }
     }
 
-    // Update account balances after creating transaction
+    // Update account balances after creating transaction (incremental update)
     if (isTransfer) {
-      console.log('🔄 Updating Source Account Balances...');
+      console.log('🔄 Updating Source Account Balances (Incremental)...');
       console.log(`🆕 Source Transaction created, updating account balances for account: ${data.account_id}`);
     } else {
       console.log(`🆕 Transaction created, updating account balances for account: ${data.account_id}`);
     }
-    
+
     try {
-      await this.updateAccountBalances(data.account_id, userId, authToken);
-      
+      // Use incremental balance update instead of full recalculation
+      await this.addTransactionToBalance(data.account_id, userId, authToken, data.amount, data.is_cleared);
+
       // For transfers, log source account after balance update
       if (isTransfer) {
         const sourceAccountAfter = await this.getAccountDetails(data.account_id, userId, authToken);
@@ -542,13 +543,43 @@ export class TransactionsService {
       }
     }
 
-    // Update account balances after updating transaction
+    // Update account balances after updating transaction (incremental update)
     try {
-      await this.updateAccountBalances(data.account_id, userId, authToken);
-
-      // If account changed, also update the old account
+      // If account changed, we need to remove from old account and add to new account
       if (originalTransaction.account_id !== data.account_id) {
-        await this.updateAccountBalances(originalTransaction.account_id, userId, authToken);
+        // Remove from old account
+        await this.removeTransactionFromBalance(
+          originalTransaction.account_id,
+          userId,
+          authToken,
+          originalTransaction.amount,
+          originalTransaction.is_cleared
+        );
+        // Add to new account
+        await this.addTransactionToBalance(
+          data.account_id,
+          userId,
+          authToken,
+          data.amount,
+          data.is_cleared
+        );
+      } else {
+        // Same account - remove old values and add new values
+        // This handles changes in amount and/or cleared status
+        await this.removeTransactionFromBalance(
+          originalTransaction.account_id,
+          userId,
+          authToken,
+          originalTransaction.amount,
+          originalTransaction.is_cleared
+        );
+        await this.addTransactionToBalance(
+          data.account_id,
+          userId,
+          authToken,
+          data.amount,
+          data.is_cleared
+        );
       }
     } catch (balanceError) {
       console.error('Error updating account balances:', balanceError);
@@ -721,9 +752,10 @@ export class TransactionsService {
 
     console.log(`✅ Transaction deleted successfully:`, JSON.stringify(deleteResult, null, 2));
 
-    // Update account balances after deleting transaction
+    // Update account balances after deleting transaction (incremental update)
     try {
-      await this.updateAccountBalances(transaction.account_id, userId, authToken);
+      // Use incremental balance update instead of full recalculation
+      await this.removeTransactionFromBalance(transaction.account_id, userId, authToken, transaction.amount, transaction.is_cleared);
     } catch (balanceError) {
       console.error('Error updating account balances:', balanceError);
       // Don't throw here - transaction was deleted successfully, balance update is secondary
@@ -868,6 +900,128 @@ export class TransactionsService {
 
   private roundToTwoDecimals(value: number): number {
     return Math.round(value * 100) / 100;
+  }
+
+  /**
+   * Incrementally add a transaction amount to account balances
+   * This is much more efficient than recalculating from all transactions
+   * @param accountId - The account to update
+   * @param userId - The user ID
+   * @param authToken - The auth token
+   * @param amount - The transaction amount to add
+   * @param isCleared - Whether the transaction is cleared
+   */
+  private async addTransactionToBalance(
+    accountId: string,
+    userId: string,
+    authToken: string,
+    amount: number,
+    isCleared: boolean
+  ): Promise<void> {
+    const supabase = this.supabaseService.getAuthenticatedClient(authToken);
+    const amountValue = this.toNumber(amount);
+
+    // Get current balances
+    const { data: account, error: accountError } = await supabase
+      .from('accounts')
+      .select('cleared_balance, uncleared_balance')
+      .eq('id', accountId)
+      .eq('user_id', userId)
+      .single();
+
+    if (accountError) {
+      throw new Error(accountError.message);
+    }
+
+    const currentCleared = this.toNumber(account.cleared_balance);
+    const currentUncleared = this.toNumber(account.uncleared_balance);
+
+    // Add amount to appropriate balance
+    const nextCleared = isCleared
+      ? this.roundToTwoDecimals(currentCleared + amountValue)
+      : currentCleared;
+    const nextUncleared = !isCleared
+      ? this.roundToTwoDecimals(currentUncleared + amountValue)
+      : currentUncleared;
+    const nextWorking = this.roundToTwoDecimals(nextCleared + nextUncleared);
+
+    // Update the account
+    const { error: updateError } = await supabase
+      .from('accounts')
+      .update({
+        cleared_balance: nextCleared,
+        uncleared_balance: nextUncleared,
+        working_balance: nextWorking
+      })
+      .eq('id', accountId)
+      .eq('user_id', userId);
+
+    if (updateError) {
+      throw new Error(updateError.message);
+    }
+
+    console.log(`✅ Incrementally added transaction to balance: account=${accountId}, amount=${amountValue}, isCleared=${isCleared}, newCleared=${nextCleared}, newUncleared=${nextUncleared}, newWorking=${nextWorking}`);
+  }
+
+  /**
+   * Incrementally remove a transaction amount from account balances
+   * This is much more efficient than recalculating from all transactions
+   * @param accountId - The account to update
+   * @param userId - The user ID
+   * @param authToken - The auth token
+   * @param amount - The transaction amount to remove
+   * @param isCleared - Whether the transaction is cleared
+   */
+  private async removeTransactionFromBalance(
+    accountId: string,
+    userId: string,
+    authToken: string,
+    amount: number,
+    isCleared: boolean
+  ): Promise<void> {
+    const supabase = this.supabaseService.getAuthenticatedClient(authToken);
+    const amountValue = this.toNumber(amount);
+
+    // Get current balances
+    const { data: account, error: accountError } = await supabase
+      .from('accounts')
+      .select('cleared_balance, uncleared_balance')
+      .eq('id', accountId)
+      .eq('user_id', userId)
+      .single();
+
+    if (accountError) {
+      throw new Error(accountError.message);
+    }
+
+    const currentCleared = this.toNumber(account.cleared_balance);
+    const currentUncleared = this.toNumber(account.uncleared_balance);
+
+    // Remove amount from appropriate balance
+    const nextCleared = isCleared
+      ? this.roundToTwoDecimals(currentCleared - amountValue)
+      : currentCleared;
+    const nextUncleared = !isCleared
+      ? this.roundToTwoDecimals(currentUncleared - amountValue)
+      : currentUncleared;
+    const nextWorking = this.roundToTwoDecimals(nextCleared + nextUncleared);
+
+    // Update the account
+    const { error: updateError } = await supabase
+      .from('accounts')
+      .update({
+        cleared_balance: nextCleared,
+        uncleared_balance: nextUncleared,
+        working_balance: nextWorking
+      })
+      .eq('id', accountId)
+      .eq('user_id', userId);
+
+    if (updateError) {
+      throw new Error(updateError.message);
+    }
+
+    console.log(`✅ Incrementally removed transaction from balance: account=${accountId}, amount=${amountValue}, isCleared=${isCleared}, newCleared=${nextCleared}, newUncleared=${nextUncleared}, newWorking=${nextWorking}`);
   }
 
   private toNumber(value: number | string | null): number {
@@ -1107,13 +1261,18 @@ export class TransactionsService {
 
 
   /**
-   * Update account balances based on current transactions
+   * Update account balances based on current transactions (FULL RECALCULATION)
+   *
+   * NOTE: This method is kept for reconciliation and data integrity checks.
+   * For normal transaction operations (create/update/delete), use the incremental
+   * methods (addTransactionToBalance, removeTransactionFromBalance) instead.
+   *
    * Logic:
    * - Cleared Balance = Account Balance (starting balance) + Sum of Cleared Transactions
    * - Uncleared Balance = Sum of Uncleared Transactions
    * - Working Balance = Cleared Balance + Uncleared Balance
    */
-  private async updateAccountBalances(accountId: string, userId: string, authToken: string): Promise<void> {
+  async updateAccountBalances(accountId: string, userId: string, authToken: string): Promise<void> {
     console.log(`🔄 Updating account balances for account: ${accountId}`);
     const supabase = this.supabaseService.getAuthenticatedClient(authToken);
 
@@ -1317,11 +1476,12 @@ export class TransactionsService {
       transfer_id: data.transfer_id
     });
 
-    // Update target account balances
-    console.log('🔄 Updating Target Account Balances...');
+    // Update target account balances (incremental update)
+    console.log('🔄 Updating Target Account Balances (Incremental)...');
     try {
-      await this.updateAccountBalances(targetAccountId, userId, authToken);
-      
+      // Use incremental balance update instead of full recalculation
+      await this.addTransactionToBalance(targetAccountId, userId, authToken, data.amount, data.is_cleared);
+
       // Get target account details after balance update
       const targetAccountAfter = await this.getAccountDetails(targetAccountId, userId, authToken);
       console.log('💰 Target Account AFTER Transfer:', {
@@ -1347,6 +1507,20 @@ export class TransactionsService {
     authToken: string
   ): Promise<void> {
     const supabase = this.supabaseService.getAuthenticatedClient(authToken);
+
+    // First, get the current linked transaction to know its current state
+    const { data: currentLinkedTransaction, error: fetchError } = await supabase
+      .from('transactions')
+      .select('*')
+      .eq('transfer_id', originalTransaction.transfer_id)
+      .eq('user_id', userId)
+      .neq('id', originalTransaction.id)
+      .single();
+
+    if (fetchError || !currentLinkedTransaction) {
+      console.error('Linked transfer transaction not found:', fetchError);
+      return;
+    }
 
     // Build the update payload for the linked transaction
     const linkedUpdatePayload: any = {};
@@ -1376,27 +1550,42 @@ export class TransactionsService {
       return;
     }
 
-    // Update the linked transaction and get its account_id in one query
-    const { data: updatedLinkedTransaction, error: updateError } = await supabase
+    // Update the linked transaction
+    const { error: updateError } = await supabase
       .from('transactions')
       .update(linkedUpdatePayload)
       .eq('transfer_id', originalTransaction.transfer_id)
       .eq('user_id', userId)
-      .neq('id', originalTransaction.id)
-      .select('account_id')
-      .single();
+      .neq('id', originalTransaction.id);
 
     if (updateError) {
       throw new Error(`Failed to update linked transfer transaction: ${updateError.message}`);
     }
 
-    // Update account balances for the linked transaction's account
-    if (updatedLinkedTransaction) {
-      try {
-        await this.updateAccountBalances(updatedLinkedTransaction.account_id, userId, authToken);
-      } catch (balanceError) {
-        console.error('Error updating linked account balances:', balanceError);
-      }
+    // Update account balances for the linked transaction's account (incremental update)
+    try {
+      // Remove old transaction values
+      await this.removeTransactionFromBalance(
+        currentLinkedTransaction.account_id,
+        userId,
+        authToken,
+        currentLinkedTransaction.amount,
+        currentLinkedTransaction.is_cleared
+      );
+
+      // Add new transaction values
+      const newAmount = linkedUpdatePayload.amount !== undefined ? linkedUpdatePayload.amount : currentLinkedTransaction.amount;
+      const newIsCleared = linkedUpdatePayload.is_cleared !== undefined ? linkedUpdatePayload.is_cleared : currentLinkedTransaction.is_cleared;
+
+      await this.addTransactionToBalance(
+        currentLinkedTransaction.account_id,
+        userId,
+        authToken,
+        newAmount,
+        newIsCleared
+      );
+    } catch (balanceError) {
+      console.error('Error updating linked account balances:', balanceError);
     }
   }
 
@@ -1433,9 +1622,16 @@ export class TransactionsService {
       throw new Error(`Failed to delete linked transfer transaction: ${deleteError.message}`);
     }
 
-    // Update account balances for the linked transaction's account
+    // Update account balances for the linked transaction's account (incremental update)
     try {
-      await this.updateAccountBalances(linkedTransaction.account_id, userId, authToken);
+      // Use incremental balance update instead of full recalculation
+      await this.removeTransactionFromBalance(
+        linkedTransaction.account_id,
+        userId,
+        authToken,
+        linkedTransaction.amount,
+        linkedTransaction.is_cleared
+      );
     } catch (balanceError) {
       console.error('Error updating linked account balances after deletion:', balanceError);
     }
