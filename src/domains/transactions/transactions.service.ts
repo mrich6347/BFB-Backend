@@ -685,13 +685,15 @@ export class TransactionsService {
     }
 
     // Store transfer info before deletion for account balance response
-    let linkedAccountId: string | null = null;
+    let linkedAccountId: string | undefined;
+    let linkedTransactionCategoryId: string | null = null;
+    let linkedTransactionAmount: number | undefined;
     if (transaction.transfer_id) {
       try {
-        // Get the linked transaction account ID before deleting
+        // Get the linked transaction details before deleting
         const { data: linkedTransaction } = await supabase
           .from('transactions')
-          .select('account_id')
+          .select('account_id, category_id, amount')
           .eq('transfer_id', transaction.transfer_id)
           .eq('user_id', userId)
           .neq('id', transaction.id)
@@ -699,6 +701,8 @@ export class TransactionsService {
 
         if (linkedTransaction) {
           linkedAccountId = linkedTransaction.account_id;
+          linkedTransactionCategoryId = linkedTransaction.category_id;
+          linkedTransactionAmount = linkedTransaction.amount;
         }
 
         await this.deleteLinkedTransferTransaction(transaction.transfer_id, id, userId, authToken);
@@ -710,7 +714,14 @@ export class TransactionsService {
 
     // Reverse category activity before deleting transaction
     const wasReadyToAssign = transaction.category_id === null;
-    if (transaction.category_id && transaction.amount !== 0 && !wasReadyToAssign) {
+
+    // Check if this transaction or its linked transaction has a payment category
+    const categoryToCheck = transaction.category_id || linkedTransactionCategoryId;
+
+    // Process category reversal if:
+    // 1. This transaction has a category (not ready-to-assign), OR
+    // 2. The linked transaction has a category (for transfer payments)
+    if (categoryToCheck && transaction.amount !== 0) {
       const budgetId = await this.getBudgetIdFromAccount(transaction.account_id, userId, authToken);
 
       if (budgetId) {
@@ -726,10 +737,11 @@ export class TransactionsService {
             this.updateCategoryActivity.bind(this)
           );
 
-          // For all transactions, do the regular category activity reversal
-          // Skip activity reversal for payment categories (they're updated manually)
-          const isPaymentCategory = await this.isPaymentCategory(transaction.category_id, userId, authToken);
-          if (!isPaymentCategory) {
+          // Check if the category (from this transaction or linked transaction) is a payment category
+          const isPaymentCategory = await this.isPaymentCategory(categoryToCheck, userId, authToken);
+
+          if (!isPaymentCategory && transaction.category_id) {
+            // For regular categories, do the normal category activity reversal
             await this.updateCategoryActivity(
               transaction.category_id,
               budgetId,
@@ -738,13 +750,15 @@ export class TransactionsService {
               userId,
               authToken
             );
-          } else {
+          } else if (isPaymentCategory) {
             // For payment categories, manually add back to available
-            // The transaction amount is negative (outflow from cash account)
+            // If this transaction has the category, use its amount (negative, from cash account)
+            // If the linked transaction has the category, use its amount (negative, from cash account)
             // We need to add back the absolute value to the payment category
-            const amountToAddBack = Math.abs(transaction.amount);
-            console.log(`⏭️ Skipping category activity reversal for payment category ${transaction.category_id}`);
-            console.log(`💳 Manually adding back $${amountToAddBack} to payment category available`);
+            const amountToUse = transaction.category_id ? transaction.amount : (linkedTransactionAmount || 0);
+            const amountToAddBack = Math.abs(amountToUse);
+            console.log(`⏭️ Skipping category activity reversal for payment category ${categoryToCheck}`);
+            console.log(`💳 Manually adding back $${amountToAddBack} to payment category available (from ${transaction.category_id ? 'current' : 'linked'} transaction)`);
 
             const supabase = this.supabaseService.getAuthenticatedClient(authToken);
             const now = new Date();
@@ -754,7 +768,7 @@ export class TransactionsService {
             const { data: paymentBalance } = await supabase
               .from('category_balances')
               .select('available')
-              .eq('category_id', transaction.category_id)
+              .eq('category_id', categoryToCheck)
               .eq('user_id', userId)
               .eq('year', currentYear)
               .eq('month', currentMonth)
@@ -767,7 +781,7 @@ export class TransactionsService {
                 .update({
                   available: (paymentBalance.available || 0) + amountToAddBack
                 })
-                .eq('category_id', transaction.category_id)
+                .eq('category_id', categoryToCheck)
                 .eq('user_id', userId)
                 .eq('year', currentYear)
                 .eq('month', currentMonth);

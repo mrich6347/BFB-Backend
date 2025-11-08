@@ -759,6 +759,17 @@ export class AccountsService {
     const updatedCreditCardAccount = await this.findOne(accountId, userId, authToken);
     const updatedCashAccount = await this.findOne(paymentDto.from_account_id, userId, authToken);
 
+    // Get the linked transfer transaction (the one on the credit card account)
+    // The transactionResult.transaction is the source transaction (on cash account)
+    // We need to find the linked transaction on the credit card account
+    const { data: linkedTransaction } = await supabase
+      .from('transactions')
+      .select('*')
+      .eq('transfer_id', transactionResult.transaction.transfer_id)
+      .eq('user_id', userId)
+      .eq('account_id', accountId) // The credit card account
+      .single();
+
     // Calculate updated Ready to Assign
     const readyToAssign = await this.readyToAssignService.calculateReadyToAssign(
       account.budget_id,
@@ -767,7 +778,8 @@ export class AccountsService {
     );
 
     return {
-      transaction: transactionResult.transaction,
+      transaction: transactionResult.transaction, // Source transaction (cash account)
+      linkedTransaction: linkedTransaction || null, // Target transaction (credit card account)
       account: updatedCreditCardAccount,
       sourceAccount: updatedCashAccount, // The cash account money came from
       paymentCategoryBalance: paymentCategoryBalance || null,

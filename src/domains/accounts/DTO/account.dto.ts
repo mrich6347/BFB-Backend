@@ -107,7 +107,8 @@ export class MakeCreditCardPaymentDto {
 }
 
 export class MakeCreditCardPaymentResponse {
-    transaction: any; // TransactionResponse type from transactions module
+    transaction: any; // TransactionResponse type from transactions module (source/cash account)
+    linkedTransaction: any; // TransactionResponse type from transactions module (target/credit card account)
     account: AccountResponse; // The credit card account
     sourceAccount: AccountResponse; // The cash account money came from
     paymentCategoryBalance: any; // CategoryBalanceResponse type from categories module
