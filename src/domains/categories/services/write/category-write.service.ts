@@ -307,8 +307,13 @@ export class CategoryWriteService {
     };
   }
 
-  async hide(id: string, userId: string, authToken: string): Promise<{ readyToAssign: number; category: CategoryResponse }> {
+  async hide(id: string, userId: string, authToken: string, year?: number, month?: number): Promise<{ readyToAssign: number; category: CategoryResponse }> {
     const supabase = this.supabaseService.getAuthenticatedClient(authToken);
+
+    // Get current year and month if not provided
+    const now = new Date();
+    const targetYear = year || now.getFullYear();
+    const targetMonth = month || (now.getMonth() + 1);
 
     // Get category data
     const { data: categoryData, error: fetchError } = await supabase
@@ -336,6 +341,35 @@ export class CategoryWriteService {
       throw new Error('Hidden Categories group not found');
     }
 
+    // Get the current balance for this category to see if there's money to return to Ready to Assign
+    const { data: currentBalance, error: balanceError } = await supabase
+      .from('category_balances')
+      .select('assigned, available')
+      .eq('category_id', id)
+      .eq('user_id', userId)
+      .eq('year', targetYear)
+      .eq('month', targetMonth)
+      .maybeSingle();
+
+    // If there's a balance, clear it (set assigned and available to 0)
+    // This will free up the money to go back to Ready to Assign
+    if (currentBalance && (currentBalance.assigned !== 0 || currentBalance.available !== 0)) {
+      const { error: clearBalanceError } = await supabase
+        .from('category_balances')
+        .update({
+          assigned: 0,
+          available: 0
+        })
+        .eq('category_id', id)
+        .eq('user_id', userId)
+        .eq('year', targetYear)
+        .eq('month', targetMonth);
+
+      if (clearBalanceError) {
+        throw new Error(clearBalanceError.message);
+      }
+    }
+
     // Move category to Hidden Categories group
     const { error: updateError } = await supabase
       .from('categories')
@@ -359,7 +393,7 @@ export class CategoryWriteService {
       throw new Error(updatedCategoryError.message);
     }
 
-    // Calculate updated Ready to Assign (should remain the same since we're just moving)
+    // Calculate updated Ready to Assign (will now include the freed-up money)
     const readyToAssign = await this.readyToAssignService.calculateReadyToAssign(
       categoryData.budget_id,
       userId,

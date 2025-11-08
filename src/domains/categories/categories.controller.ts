@@ -57,9 +57,14 @@ export class CategoriesController {
   }
 
   @Patch(':id/hide')
-  async hide(@Param('id', new ParseUUIDPipe()) id: string, @Req() req: any): Promise<{ readyToAssign: number }> {
+  async hide(
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Req() req: any,
+    @Query('year', new ParseIntPipe({ optional: true })) year?: number,
+    @Query('month', new ParseIntPipe({ optional: true })) month?: number
+  ): Promise<{ readyToAssign: number }> {
     const authToken = this.authService.getAuthToken(req);
-    return this.categoryWriteService.hide(id, req.user.id, authToken);
+    return this.categoryWriteService.hide(id, req.user.id, authToken, year, month);
   }
 
   @Patch(':id/unhide')
