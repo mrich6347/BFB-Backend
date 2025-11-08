@@ -81,78 +81,10 @@ export class ReadyToAssignService {
     }
 
     console.log(`   ───────────────────────────────────────────────────────`);
-    console.log(`   Subtotal from accounts: $${totalFromAccounts.toFixed(2)}`);
+    console.log(`   ✅ TOTAL AVAILABLE MONEY: $${totalFromAccounts.toFixed(2)}`);
+    console.log(`   Note: working_balance already includes all transactions (cleared + uncleared)`);
 
-    // Add income transactions (transactions with null category_id represent Ready to Assign income)
-    // Exclude transfers (they have transfer_id) and system-generated adjustment transactions
-    // Note: Since we're using working_balance, transfers are already included in account balances
-    // and shouldn't be counted again here
-    let totalIncome = 0;
-    if (accountIds.length > 0) {
-      const { data: incomeTransactions, error: incomeError } = await supabase
-        .from('transactions')
-        .select('id, amount, date, payee, memo, transfer_id')
-        .is('category_id', null) // Ready to Assign transactions have null category_id
-        .is('transfer_id', null) // Exclude transfers - they're already in working_balance
-        .in('account_id', accountIds)
-        .eq('user_id', userId);
-
-      if (incomeError) {
-        throw new Error(incomeError.message);
-      }
-
-      // Filter out system-generated adjustment transactions
-      const systemAdjustmentPayees = [
-        'Reconciliation Adjustment',
-        'Account Closure Adjustment',
-        'Balance Update'
-      ];
-
-      if (incomeTransactions && incomeTransactions.length > 0) {
-        console.log(`\n💰 INCOME TRANSACTIONS (Ready to Assign):`);
-        
-        let excludedCount = 0;
-        let excludedTotal = 0;
-        
-        for (const transaction of incomeTransactions) {
-          const payee = transaction.payee || '';
-          const isSystemAdjustment = systemAdjustmentPayees.some(adjustmentPayee => 
-            payee.includes(adjustmentPayee)
-          );
-          
-          // Transfers are already excluded by the query (transfer_id IS NULL), but double-check
-          const isTransfer = transaction.transfer_id !== null;
-          
-          if (isTransfer || isSystemAdjustment) {
-            // Exclude transfers and system adjustments - they're already reflected in working_balance
-            excludedCount++;
-            excludedTotal += transaction.amount || 0;
-            const reason = isTransfer ? 'Transfer (already in account balance)' : 'System adjustment';
-            console.log(`   ⚠️  EXCLUDED: $${(transaction.amount || 0).toFixed(2)} - ${payee} (${transaction.date}) [${reason}]`);
-          } else {
-            // Real income transaction (new money coming in)
-            const amount = transaction.amount || 0;
-            totalIncome += amount;
-            console.log(`   + $${amount.toFixed(2)} - ${payee} (${transaction.date})`);
-          }
-        }
-        
-        if (excludedCount > 0) {
-          console.log(`   ───────────────────────────────────────────────────────`);
-          console.log(`   Excluded ${excludedCount} system adjustment(s): $${excludedTotal.toFixed(2)}`);
-        }
-      } else {
-        console.log(`\n💰 INCOME TRANSACTIONS: None`);
-      }
-    }
-
-    const total = totalFromAccounts + totalIncome;
-    console.log(`   ───────────────────────────────────────────────────────`);
-    console.log(`   Total Income: $${totalIncome.toFixed(2)}`);
-    console.log(`   ───────────────────────────────────────────────────────`);
-    console.log(`   ✅ TOTAL AVAILABLE MONEY: $${total.toFixed(2)}`);
-
-    return total;
+    return totalFromAccounts;
   }
 
   private async calculateTotalCategoryAvailability(supabase: SupabaseClient, budgetId: string, userId: string): Promise<number> {
