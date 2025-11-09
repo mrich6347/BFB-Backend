@@ -14,6 +14,7 @@ import { TransactionsModule } from './domains/transactions/transactions.module';
 import { AutoAssignModule } from './domains/auto-assign/auto-assign.module';
 import { UserProfilesModule } from './domains/user-profiles/user-profiles.module';
 import { SharedGoalsModule } from './domains/shared-goals/shared-goals.module';
+import { PayeesModule } from './domains/payees/payees.module';
 
 @Module({
   imports: [
@@ -29,7 +30,8 @@ import { SharedGoalsModule } from './domains/shared-goals/shared-goals.module';
     TransactionsModule,
     AutoAssignModule,
     UserProfilesModule,
-    SharedGoalsModule
+    SharedGoalsModule,
+    PayeesModule
   ],
   controllers: [AppController],
   providers: [AppService],

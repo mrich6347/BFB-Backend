@@ -6,11 +6,12 @@ import { CategoryBalancesModule } from '../category-balances/category-balances.m
 import { CategoriesModule } from '../categories/categories.module';
 import { CreditCardDebtModule } from '../credit-card-debt/credit-card-debt.module';
 import { ReadyToAssignModule } from '../ready-to-assign/ready-to-assign.module';
+import { PayeesModule } from '../payees/payees.module';
 
 @Module({
   controllers: [TransactionsController],
   providers: [TransactionsService],
-  imports: [AuthModule, CategoryBalancesModule, CategoriesModule, CreditCardDebtModule, ReadyToAssignModule],
+  imports: [AuthModule, CategoryBalancesModule, CategoriesModule, CreditCardDebtModule, ReadyToAssignModule, PayeesModule],
   exports: [TransactionsService],
 })
 export class TransactionsModule {}

@@ -7,6 +7,7 @@ import { CategoryReadService } from '../categories/services/read/category-read.s
 import { UserDateContextUtils } from '../../common/interfaces/user-date-context.interface';
 import { CreditCardDebtService } from '../credit-card-debt/credit-card-debt.service';
 import { ReadyToAssignService } from '../ready-to-assign/ready-to-assign.service';
+import { PayeesService } from '../payees/payees.service';
 import { v4 as uuidv4 } from 'uuid';
 
 @Injectable()
@@ -18,7 +19,8 @@ export class TransactionsService {
     private categoryBalancesService: CategoryBalancesService,
     private categoryReadService: CategoryReadService,
     private creditCardDebtService: CreditCardDebtService,
-    private readyToAssignService: ReadyToAssignService
+    private readyToAssignService: ReadyToAssignService,
+    private payeesService: PayeesService
   ) {
     this.supabase = this.supabaseService.client;
   }
@@ -61,6 +63,24 @@ export class TransactionsService {
 
     if (error) {
       throw new Error(error.message);
+    }
+
+    // Handle payee creation/update if payee is provided and not a transfer
+    if (data.payee && !isTransfer) {
+      try {
+        const budgetId = await this.getBudgetIdFromAccount(data.account_id, userId, authToken);
+        if (budgetId) {
+          await this.payeesService.upsert({
+            budget_id: budgetId,
+            name: data.payee,
+            last_category_id: data.category_id,
+            is_transfer: false
+          }, userId, authToken);
+        }
+      } catch (payeeError) {
+        console.error('Error upserting payee:', payeeError);
+        // Don't fail the transaction if payee upsert fails
+      }
     }
 
     // Handle transfer creation if this is a transfer transaction
@@ -440,6 +460,25 @@ export class TransactionsService {
 
     if (error) {
       throw new Error(error.message);
+    }
+
+    // Handle payee creation/update if payee is provided and not a transfer
+    const isTransfer = this.isTransferPayee(data.payee || '');
+    if (data.payee && !isTransfer) {
+      try {
+        const budgetId = await this.getBudgetIdFromAccount(data.account_id, userId, authToken);
+        if (budgetId) {
+          await this.payeesService.upsert({
+            budget_id: budgetId,
+            name: data.payee,
+            last_category_id: data.category_id,
+            is_transfer: false
+          }, userId, authToken);
+        }
+      } catch (payeeError) {
+        console.error('Error upserting payee:', payeeError);
+        // Don't fail the transaction if payee upsert fails
+      }
     }
 
     // Handle transfer synchronization if this is a transfer transaction

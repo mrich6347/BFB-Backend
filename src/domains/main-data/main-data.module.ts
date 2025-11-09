@@ -12,6 +12,7 @@ import { TransactionsModule } from '../transactions/transactions.module';
 import { AutoAssignModule } from '../auto-assign/auto-assign.module';
 import { UserProfilesModule } from '../user-profiles/user-profiles.module';
 import { SharedGoalsModule } from '../shared-goals/shared-goals.module';
+import { PayeesModule } from '../payees/payees.module';
 
 @Module({
   controllers: [MainDataController],
@@ -27,7 +28,8 @@ import { SharedGoalsModule } from '../shared-goals/shared-goals.module';
     TransactionsModule,
     AutoAssignModule,
     UserProfilesModule,
-    SharedGoalsModule
+    SharedGoalsModule,
+    PayeesModule
   ],
 })
 export class MainDataModule {}
