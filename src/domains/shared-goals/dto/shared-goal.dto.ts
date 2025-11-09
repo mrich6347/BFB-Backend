@@ -159,6 +159,14 @@ export class UpdateParticipantDto {
   category_id?: string;
 }
 
+export class UpdateParticipantByCreatorDto {
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @IsOptional()
+  @Min(0, { message: 'Monthly contribution must be 0 or greater' })
+  @Max(999999.99, { message: 'Monthly contribution is too large' })
+  monthly_contribution?: number;
+}
+
 
 
 export class ParticipantWithProgressResponse extends GoalParticipantResponse {

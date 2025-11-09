@@ -4,6 +4,7 @@ import {
   CreateInvitationDto,
   InvitationResponse,
   UpdateParticipantDto,
+  UpdateParticipantByCreatorDto,
   GoalParticipantResponse,
   InvitationStatus
 } from './dto/shared-goal.dto';
@@ -481,6 +482,60 @@ export class SharedGoalsCollaborationService {
 
     if (updateError) {
       console.log("ERROR updating participant:", updateError);
+      throw new Error(updateError.message);
+    }
+  }
+
+  async updateParticipantByCreator(goalId: string, participantId: string, updateParticipantByCreatorDto: UpdateParticipantByCreatorDto, userId: string, authToken: string): Promise<void> {
+    const supabase = this.supabaseService.getAuthenticatedClient(authToken);
+
+    // Get user's profile
+    const { data: userProfile, error: profileError } = await supabase
+      .from('user_profiles')
+      .select('id')
+      .eq('user_id', userId)
+      .single();
+
+    if (profileError || !userProfile) {
+      throw new NotFoundException('User profile not found');
+    }
+
+    // Verify goal exists and user is the creator
+    const { data: goal, error: goalError } = await supabase
+      .from('shared_goals')
+      .select('id, created_by')
+      .eq('id', goalId)
+      .single();
+
+    if (goalError || !goal) {
+      throw new NotFoundException('Goal not found');
+    }
+
+    // Check if user is the creator (only creators can update other participants)
+    if (goal.created_by !== userProfile.id) {
+      throw new ForbiddenException('Only the goal creator can update other participants');
+    }
+
+    // Get the participant to be updated
+    const { data: participant, error: participantError } = await supabase
+      .from('goal_participants')
+      .select('id, user_profile_id')
+      .eq('id', participantId)
+      .eq('goal_id', goalId)
+      .single();
+
+    if (participantError || !participant) {
+      throw new NotFoundException('Participant not found in this goal');
+    }
+
+    // Update participant
+    const { error: updateError } = await supabase
+      .from('goal_participants')
+      .update(updateParticipantByCreatorDto)
+      .eq('id', participantId);
+
+    if (updateError) {
+      console.log("ERROR updating participant by creator:", updateError);
       throw new Error(updateError.message);
     }
   }

@@ -21,6 +21,7 @@ import {
   InvitationResponse,
   GoalParticipantResponse,
   UpdateParticipantDto,
+  UpdateParticipantByCreatorDto,
   GoalProgressResponse
 } from './dto/shared-goal.dto';
 import { SupabaseAuthGuard } from '../../guards/auth.guard';
@@ -134,6 +135,17 @@ export class SharedGoalsController {
   ): Promise<void> {
     const authToken = this.authService.getAuthToken(req);
     return this.sharedGoalsCollaborationService.updateParticipant(goalId, updateParticipantDto, req.user.id, authToken);
+  }
+
+  @Put(':id/participant/:participantId/by-creator')
+  async updateParticipantByCreator(
+    @Param('id', new ParseUUIDPipe()) goalId: string,
+    @Param('participantId', new ParseUUIDPipe()) participantId: string,
+    @Body() updateParticipantByCreatorDto: UpdateParticipantByCreatorDto,
+    @Req() req: any
+  ): Promise<void> {
+    const authToken = this.authService.getAuthToken(req);
+    return this.sharedGoalsCollaborationService.updateParticipantByCreator(goalId, participantId, updateParticipantByCreatorDto, req.user.id, authToken);
   }
 
   @Delete(':id/participant/:participantId')
