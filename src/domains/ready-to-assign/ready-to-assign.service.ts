@@ -14,10 +14,6 @@ export class ReadyToAssignService {
   async calculateReadyToAssign(budgetId: string, userId: string, authToken: string): Promise<number> {
     const supabase = this.supabaseService.getAuthenticatedClient(authToken);
 
-    console.log('═══════════════════════════════════════════════════════════');
-    console.log('📊 READY TO ASSIGN CALCULATION');
-    console.log('═══════════════════════════════════════════════════════════');
-
     // Calculate Total Available Money from accounts
     const totalAvailableMoney = await this.calculateTotalAvailableMoney(supabase, budgetId, userId);
 
@@ -27,23 +23,16 @@ export class ReadyToAssignService {
 
     const readyToAssign = totalAvailableMoney - totalCategoryAvailability;
 
-    console.log('───────────────────────────────────────────────────────────');
-    console.log(`💰 Total Available Money:     $${totalAvailableMoney.toFixed(2)}`);
-    console.log(`📝 Total In Categories:        $${totalCategoryAvailability.toFixed(2)}`);
-    console.log(`───────────────────────────────────────────────────────────`);
-    console.log(`✅ Ready to Assign:            $${readyToAssign.toFixed(2)}`);
-    console.log('═══════════════════════════════════════════════════════════\n');
+    console.log('📊 RTA: Cash=$' + totalAvailableMoney.toFixed(2) + ' - Categories=$' + totalCategoryAvailability.toFixed(2) + ' = $' + readyToAssign.toFixed(2));
 
     return readyToAssign;
   }
 
   private async calculateTotalAvailableMoney(supabase: SupabaseClient, budgetId: string, userId: string): Promise<number> {
     // Get account balances - use working_balance which includes all transactions (cleared + uncleared)
-    // This matches YNAB's model where Ready to Assign = Sum of cash account current balances
-    // BUT: In YNAB, reconciled transactions are excluded from Ready to Assign because they're "locked in"
     const { data: accounts, error } = await supabase
       .from('accounts')
-      .select('id, name, account_type, account_balance, cleared_balance, uncleared_balance, working_balance')
+      .select('id, name, account_type, working_balance')
       .eq('budget_id', budgetId)
       .eq('user_id', userId)
       .eq('is_active', true);
@@ -52,37 +41,20 @@ export class ReadyToAssignService {
       throw new Error(error.message);
     }
 
-    console.log('📁 ACCOUNTS:');
     let totalFromAccounts = 0;
-    const accountIds: string[] = [];
+    const cashAccounts: string[] = [];
 
     for (const account of accounts || []) {
-      // Use working_balance (current balance including all transactions) not account_balance (starting balance only)
-      let balance = account.working_balance || 0;
-      const accountType = account.account_type;
+      const balance = account.working_balance || 0;
 
       // Only cash accounts contribute to Ready to Assign (tracking accounts are excluded)
       if (account.account_type === AccountType.CASH) {
         totalFromAccounts += balance;
-        accountIds.push(account.id);
-        console.log(`   💵 ${account.name} (${accountType}): $${balance.toFixed(2)} [working_balance]`);
-        console.log(`      📊 account_balance: ${(account.account_balance || 0).toFixed(2)}`);
-        console.log(`      📊 cleared_balance: ${(account.cleared_balance || 0).toFixed(2)}, uncleared_balance: ${(account.uncleared_balance || 0).toFixed(2)}`);
-        console.log(`      📊 working_balance: ${(account.working_balance || 0).toFixed(2)} (before adjustment)`);
-        
-        // Verify the calculation
-        const calculatedWorking = (account.cleared_balance || 0) + (account.uncleared_balance || 0);
-        if (Math.abs(calculatedWorking - (account.working_balance || 0)) > 0.01) {
-          console.log(`      ⚠️  WARNING: working_balance mismatch! Calculated: ${calculatedWorking.toFixed(2)}, Stored: ${(account.working_balance || 0).toFixed(2)}`);
-        }
-      } else {
-        console.log(`   ⚠️  ${account.name} (${accountType}): $${balance.toFixed(2)} [EXCLUDED]`);
+        cashAccounts.push(`${account.name}=$${balance.toFixed(2)}`);
       }
     }
 
-    console.log(`   ───────────────────────────────────────────────────────`);
-    console.log(`   ✅ TOTAL AVAILABLE MONEY: $${totalFromAccounts.toFixed(2)}`);
-    console.log(`   Note: working_balance already includes all transactions (cleared + uncleared)`);
+    console.log(`   💵 Cash accounts: [${cashAccounts.join(', ')}] = $${totalFromAccounts.toFixed(2)}`);
 
     return totalFromAccounts;
   }
@@ -134,7 +106,7 @@ export class ReadyToAssignService {
       }
     }
 
-    // Get category names for better logging
+    // Get category names for logging
     const categoryIds = [...new Set(categoryBalances.map(b => b.category_id))];
     const { data: categories } = await supabase
       .from('categories')
@@ -144,45 +116,39 @@ export class ReadyToAssignService {
 
     const categoryMap = new Map(categories?.map(c => [c.id, c.name]) || []);
 
-    console.log(`\n📝 CATEGORY BALANCES (for ${targetYear}/${targetMonth}):`);
-    
-    // Sum all assigned amounts across all months (including negative ones)
-    // Negative assigned amounts represent money moved back to Ready to Assign
+    // Sum all available amounts - YNAB only counts positive availability
+    // Negative availability (overspending) is already reflected in reduced account balances
+    // So we don't double-count it by also reducing Ready to Assign
     let totalPositiveAvailability = 0;
-    let totalOverspent = 0;
-    let positiveCount = 0;
-    let negativeCount = 0;
-    let zeroCount = 0;
+    let totalNegativeAvailability = 0;
+    const positiveCategories: string[] = [];
+    const negativeCategories: string[] = [];
 
     for (const balance of categoryBalances) {
       const available = balance.available || 0;
+      const categoryName = categoryMap.get(balance.category_id) || 'Unknown';
+
       if (available > 0) {
-        positiveCount++;
         totalPositiveAvailability += available;
+        positiveCategories.push(`${categoryName}=$${available.toFixed(2)}`);
       } else if (available < 0) {
-        negativeCount++;
-        totalOverspent += Math.abs(available);
-      } else {
-        zeroCount++;
-      }
-      // Only log non-zero availability to avoid too much noise
-      if (available !== 0) {
-        const categoryName = categoryMap.get(balance.category_id) || 'Unknown';
-        console.log(`   ${available >= 0 ? '+' : ''}$${available.toFixed(2)} available - ${categoryName} (${balance.year}/${balance.month}) (assigned: ${(balance.assigned || 0).toFixed(2)})`);
+        totalNegativeAvailability += available;
+        negativeCategories.push(`${categoryName}=$${available.toFixed(2)}`);
       }
     }
 
-    console.log(`   ───────────────────────────────────────────────────────`);
-    console.log(`   Positive availability: ${positiveCount} (total $${totalPositiveAvailability.toFixed(2)})`);
-    console.log(`   Negative availability: ${negativeCount} (overspent $${totalOverspent.toFixed(2)})`);
-    console.log(`   Zero availability: ${zeroCount}`);
-    console.log(`   ───────────────────────────────────────────────────────`);
-    console.log(`   ✅ TOTAL AVAILABLE IN CATEGORIES: $${totalPositiveAvailability.toFixed(2)}`);
-    if (totalOverspent > 0) {
-      console.log(`   ❗️ Overspending detected: $${totalOverspent.toFixed(2)} (already reflected in account balances)`);
-    }
+    const totalCategoryAvailability = totalPositiveAvailability + totalNegativeAvailability;
 
-    return totalPositiveAvailability;
+    console.log(`   📝 Categories (${targetYear}/${targetMonth}):`);
+    if (positiveCategories.length > 0) {
+      console.log(`      ✅ Positive [${positiveCategories.join(', ')}] = $${totalPositiveAvailability.toFixed(2)}`);
+    }
+    if (negativeCategories.length > 0) {
+      console.log(`      ❌ Negative [${negativeCategories.join(', ')}] = $${totalNegativeAvailability.toFixed(2)}`);
+    }
+    console.log(`      📊 Total = $${totalPositiveAvailability.toFixed(2)} + $${totalNegativeAvailability.toFixed(2)} = $${totalCategoryAvailability.toFixed(2)}`);
+
+    return totalCategoryAvailability;
   }
 
 
