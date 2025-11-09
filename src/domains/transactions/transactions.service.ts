@@ -331,6 +331,7 @@ export class TransactionsService {
       .select('*')
       .eq('account_id', accountId)
       .eq('user_id', userId)
+      .order('is_reconciled', { ascending: true }) // Unreconciled (false) first
       .order('date', { ascending: false })
       .order('created_at', { ascending: false });
 
@@ -370,6 +371,7 @@ export class TransactionsService {
       .select('*')
       .eq('user_id', userId)
       .in('account_id', accountIds)
+      .order('is_reconciled', { ascending: true }) // Unreconciled (false) first
       .order('date', { ascending: false })
       .order('created_at', { ascending: false });
 
