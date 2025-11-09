@@ -655,9 +655,12 @@ export class TransactionsService {
       }
     }
 
-    // Get the affected category balance if transaction has a category
+    // Get the affected category balances
+    // When category changes, we need to return both old and new category balances
     let categoryBalance: any = null;
-    if (data.category_id && budgetId) {
+    const categoryBalances: any[] = [];
+
+    if (budgetId) {
       try {
         // Get current user date context for determining which month's balance to fetch
         const { year: currentYear, month: currentMonth } = UserDateContextUtils.getCurrentUserDate({
@@ -666,16 +669,67 @@ export class TransactionsService {
           userDate: updateTransactionDto.userDate
         });
 
-        categoryBalance = await this.categoryBalancesService.findByCategory(
-          data.category_id,
-          currentYear,
-          currentMonth,
-          userId,
-          authToken
-        );
+        // Check if category changed
+        const categoryChanged = originalTransaction.category_id !== data.category_id;
+
+        // If category changed, fetch both old and new category balances
+        if (categoryChanged) {
+          // Fetch old category balance (if it wasn't ready-to-assign)
+          if (originalTransaction.category_id) {
+            try {
+              const oldCategoryBalance = await this.categoryBalancesService.findByCategory(
+                originalTransaction.category_id,
+                currentYear,
+                currentMonth,
+                userId,
+                authToken
+              );
+              if (oldCategoryBalance) {
+                categoryBalances.push(oldCategoryBalance);
+              }
+            } catch (error) {
+              console.error('Error fetching old category balance:', error);
+            }
+          }
+
+          // Fetch new category balance (if it's not ready-to-assign)
+          if (data.category_id) {
+            try {
+              const newCategoryBalance = await this.categoryBalancesService.findByCategory(
+                data.category_id,
+                currentYear,
+                currentMonth,
+                userId,
+                authToken
+              );
+              if (newCategoryBalance) {
+                categoryBalances.push(newCategoryBalance);
+                categoryBalance = newCategoryBalance; // For backward compatibility
+              }
+            } catch (error) {
+              console.error('Error fetching new category balance:', error);
+            }
+          }
+        } else if (data.category_id) {
+          // Category didn't change, just fetch the current category balance
+          try {
+            categoryBalance = await this.categoryBalancesService.findByCategory(
+              data.category_id,
+              currentYear,
+              currentMonth,
+              userId,
+              authToken
+            );
+            if (categoryBalance) {
+              categoryBalances.push(categoryBalance);
+            }
+          } catch (error) {
+            console.error('Error fetching category balance:', error);
+          }
+        }
       } catch (error) {
-        console.error('Error fetching category balance:', error);
-        // Continue with categoryBalance = null
+        console.error('Error in category balance fetching logic:', error);
+        // Continue with empty categoryBalances
       }
     }
 
@@ -704,7 +758,8 @@ export class TransactionsService {
             sourceAccount: sourceAccountResult,
             targetAccount: targetAccountDetails,
             readyToAssign,
-            categoryBalance
+            categoryBalance,
+            categoryBalances: categoryBalances.length > 0 ? categoryBalances : undefined
           };
         }
       } catch (accountError) {
@@ -716,7 +771,8 @@ export class TransactionsService {
     return {
       transaction: data,
       readyToAssign,
-      categoryBalance
+      categoryBalance,
+      categoryBalances: categoryBalances.length > 0 ? categoryBalances : undefined
     };
   }
 
