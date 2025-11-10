@@ -72,7 +72,7 @@ export class CategoriesController {
     @Param('id', new ParseUUIDPipe()) id: string,
     @Body() unhideCategoryDto: UnhideCategoryDto,
     @Req() req: any
-  ): Promise<{ readyToAssign: number }> {
+  ): Promise<{ readyToAssign: number; category: CategoryResponse }> {
     const authToken = this.authService.getAuthToken(req);
     return this.categoryWriteService.unhide(id, req.user.id, authToken, unhideCategoryDto.targetGroupId);
   }
