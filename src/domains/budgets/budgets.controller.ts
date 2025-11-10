@@ -43,6 +43,13 @@ export class BudgetsController {
     return this.budgetsService.update(id, updateBudgetDto, req.user.id, authToken);
   }
 
+  @Delete(':id')
+  async delete(@Param('id', new ParseUUIDPipe()) id: string, @Req() req: any): Promise<{ message: string }> {
+    const authToken = this.authService.getAuthToken(req);
+    await this.budgetsService.delete(id, req.user.id, authToken);
+    return { message: 'Budget deleted successfully' };
+  }
+
   @Post('import-ynab')
   @UseInterceptors(FileInterceptor('file', {
     storage: diskStorage({

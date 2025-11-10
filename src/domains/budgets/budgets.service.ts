@@ -110,4 +110,32 @@ export class BudgetsService {
       throw new ConflictException(`A budget already exists with the name '${name}'`);
     }
   }
+
+  async delete(id: string, userId: string, authToken: string): Promise<void> {
+    const supabase = this.supabaseService.getAuthenticatedClient(authToken);
+
+    // Verify budget belongs to user before deleting
+    const { data: budget, error: fetchError } = await supabase
+      .from('budgets')
+      .select('id')
+      .eq('id', id)
+      .eq('user_id', userId)
+      .single();
+
+    if (fetchError || !budget) {
+      throw new Error('Budget not found or you do not have permission to delete it');
+    }
+
+    // Delete the budget - cascade will handle related records
+    const { error } = await supabase
+      .from('budgets')
+      .delete()
+      .eq('id', id)
+      .eq('user_id', userId);
+
+    if (error) {
+      console.log("ERROR deleting budget:", error);
+      throw new Error(error.message);
+    }
+  }
 }
