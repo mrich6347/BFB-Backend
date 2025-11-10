@@ -16,6 +16,7 @@ import { UserProfilesModule } from './domains/user-profiles/user-profiles.module
 import { SharedGoalsModule } from './domains/shared-goals/shared-goals.module';
 import { PayeesModule } from './domains/payees/payees.module';
 import { NetWorthHistoryModule } from './domains/net-worth-history/net-worth-history.module';
+import { ScheduledTransactionsModule } from './domains/scheduled-transactions/scheduled-transactions.module';
 
 @Module({
   imports: [
@@ -33,7 +34,8 @@ import { NetWorthHistoryModule } from './domains/net-worth-history/net-worth-his
     UserProfilesModule,
     SharedGoalsModule,
     PayeesModule,
-    NetWorthHistoryModule
+    NetWorthHistoryModule,
+    ScheduledTransactionsModule
   ],
   controllers: [AppController],
   providers: [AppService],
