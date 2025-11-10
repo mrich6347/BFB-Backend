@@ -12,6 +12,7 @@ import { UserProfilesService } from '../user-profiles/user-profiles.service';
 import { SharedGoalsService } from '../shared-goals/shared-goals.service';
 import { SharedGoalsCollaborationService } from '../shared-goals/shared-goals-collaboration.service';
 import { PayeesService } from '../payees/payees.service';
+import { ScheduledTransactionsService } from '../scheduled-transactions/scheduled-transactions.service';
 import { UserDateContextUtils, WithUserDateContext } from '../../common/interfaces/user-date-context.interface';
 
 @Injectable()
@@ -28,14 +29,15 @@ export class MainDataService {
         private readonly userProfilesService: UserProfilesService,
         private readonly sharedGoalsService: SharedGoalsService,
         private readonly sharedGoalsCollaborationService: SharedGoalsCollaborationService,
-        private readonly payeesService: PayeesService
+        private readonly payeesService: PayeesService,
+        private readonly scheduledTransactionsService: ScheduledTransactionsService
     ) {}
 
     async getMainData(budgetId: string, authToken: string, userId: string, userDateContext?: WithUserDateContext): Promise<MainDataResponse> {
         // First, check if we need to roll over to current month
         await this.checkAndHandleMonthRollover(budgetId, userId, authToken, userDateContext);
 
-        const [budget, accounts, categoryGroups, categories, categoryBalances, transactions, readyToAssign, autoAssignConfigurations, userProfile, sharedGoals, invitations, payees] = await Promise.all([
+        const [budget, accounts, categoryGroups, categories, categoryBalances, transactions, readyToAssign, autoAssignConfigurations, userProfile, sharedGoals, invitations, payees, scheduledTransactions] = await Promise.all([
             this.budgetsService.findOne(budgetId, userId, authToken),
             this.accountsService.findAll(userId, authToken, budgetId),
             this.categoryGroupsService.findAll(budgetId, userId, authToken),
@@ -47,7 +49,8 @@ export class MainDataService {
             this.userProfilesService.findByUserId(userId, authToken),
             this.sharedGoalsService.findByUserId(userId, budgetId, authToken),
             this.sharedGoalsCollaborationService.getInvitations(userId, authToken),
-            this.payeesService.findByBudget(budgetId, userId, authToken)
+            this.payeesService.findByBudget(budgetId, userId, authToken),
+            this.scheduledTransactionsService.findAllByBudget(budgetId, userId, authToken)
         ]);
 
 
@@ -63,7 +66,8 @@ export class MainDataService {
            userProfile: userProfile || undefined,
            sharedGoals,
            invitations,
-           payees
+           payees,
+           scheduledTransactions
         }
     }
 

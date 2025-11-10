@@ -8,6 +8,7 @@ import { AutoAssignConfigurationSummary } from "../../auto-assign/dto/auto-assig
 import { UserProfileResponse } from "../../user-profiles/dto/user-profile.dto";
 import { SharedGoalResponse, InvitationResponse } from "../../shared-goals/dto/shared-goal.dto";
 import { PayeeResponse } from "../../payees/dto/payee.dto";
+import { ScheduledTransactionResponse } from "../../scheduled-transactions/dto/scheduled-transaction.dto";
 
 export class MainDataResponse {
     budget: BudgetResponse;
@@ -22,4 +23,5 @@ export class MainDataResponse {
     sharedGoals: SharedGoalResponse[];
     invitations: InvitationResponse[];
     payees: PayeeResponse[];
+    scheduledTransactions: ScheduledTransactionResponse[];
 }
