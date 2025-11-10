@@ -684,7 +684,7 @@ export class AccountsService {
       memo: paymentDto.memo || 'Credit Card Payment',
       payee: `Transfer : ${account.name}`, // Transfer payee format
       category_id: paymentCategory.id, // Assign to payment category
-      is_cleared: true,
+      is_cleared: false,
       is_reconciled: false
     }, userId, authToken);
 
