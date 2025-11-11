@@ -6,7 +6,8 @@ import {
   SharedGoalResponse,
   GoalParticipantResponse,
   GoalProgressResponse,
-  GoalStatus
+  GoalStatus,
+  GoalEventResponse
 } from './dto/shared-goal.dto';
 import { SupabaseService } from '../../supabase/supabase.service';
 import { ProgressCalculationService } from './progress-calculation.service';
@@ -369,5 +370,75 @@ export class SharedGoalsService {
       console.log("ERROR adding creator as participant:", error);
       throw new Error(error.message);
     }
+  }
+
+  async getGoalEvents(goalId: string, userId: string, authToken: string, daysBack: number = 7): Promise<GoalEventResponse[]> {
+    const supabase = this.supabaseService.getAuthenticatedClient(authToken);
+
+    // Get user's profile
+    const { data: userProfile, error: profileError } = await supabase
+      .from('user_profiles')
+      .select('id')
+      .eq('user_id', userId)
+      .single();
+
+    if (profileError || !userProfile) {
+      throw new NotFoundException('User profile not found');
+    }
+
+    // Verify user has access to this goal
+    const { data: goal, error: goalError } = await supabase
+      .from('shared_goals')
+      .select(`
+        id, created_by,
+        participants:goal_participants(user_profile_id)
+      `)
+      .eq('id', goalId)
+      .single();
+
+    if (goalError || !goal) {
+      throw new NotFoundException('Goal not found');
+    }
+
+    const hasAccess = goal.created_by === userProfile.id ||
+      goal.participants?.some(p => p.user_profile_id === userProfile.id);
+
+    if (!hasAccess) {
+      throw new ForbiddenException('You do not have access to this goal');
+    }
+
+    // Calculate the date threshold
+    const dateThreshold = new Date();
+    dateThreshold.setDate(dateThreshold.getDate() - daysBack);
+
+    // Fetch events for this goal from the last N days
+    const { data: events, error: eventsError } = await supabase
+      .from('shared_goal_events')
+      .select(`
+        id,
+        goal_id,
+        user_profile_id,
+        category_id,
+        amount_change,
+        event_type,
+        created_at,
+        user_profile:user_profiles(username, display_name)
+      `)
+      .eq('goal_id', goalId)
+      .gte('created_at', dateThreshold.toISOString())
+      .order('created_at', { ascending: false });
+
+    if (eventsError) {
+      console.log("ERROR fetching goal events:", eventsError);
+      throw new Error(eventsError.message);
+    }
+
+    // Transform the response to match the expected type
+    return (events || []).map(event => ({
+      ...event,
+      user_profile: Array.isArray(event.user_profile)
+        ? event.user_profile[0]
+        : event.user_profile
+    }));
   }
 }

@@ -22,7 +22,8 @@ import {
   GoalParticipantResponse,
   UpdateParticipantDto,
   UpdateParticipantByCreatorDto,
-  GoalProgressResponse
+  GoalProgressResponse,
+  GoalEventResponse
 } from './dto/shared-goal.dto';
 import { SupabaseAuthGuard } from '../../guards/auth.guard';
 import { AuthService } from '../../configurations/auth/auth.service';
@@ -167,5 +168,18 @@ export class SharedGoalsController {
   ): Promise<GoalProgressResponse> {
     const authToken = this.authService.getAuthToken(req);
     return this.sharedGoalsService.getGoalProgress(goalId, req.user.id, authToken);
+  }
+
+  // ===== EVENTS ENDPOINTS =====
+
+  @Get(':id/events')
+  async getGoalEvents(
+    @Param('id', new ParseUUIDPipe()) goalId: string,
+    @Query('daysBack') daysBack: string,
+    @Req() req: any
+  ): Promise<GoalEventResponse[]> {
+    const authToken = this.authService.getAuthToken(req);
+    const days = daysBack ? parseInt(daysBack, 10) : 7;
+    return this.sharedGoalsService.getGoalEvents(goalId, req.user.id, authToken, days);
   }
 }

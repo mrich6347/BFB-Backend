@@ -180,3 +180,22 @@ export class GoalProgressResponse {
   projected_completion_date?: Date;
   participants_with_progress: ParticipantWithProgressResponse[];
 }
+
+export enum GoalEventType {
+  ASSIGNED = 'assigned',
+  UNASSIGNED = 'unassigned'
+}
+
+export class GoalEventResponse {
+  id: string;
+  goal_id: string;
+  user_profile_id: string;
+  category_id: string;
+  amount_change: number;
+  event_type: GoalEventType;
+  created_at: Date;
+  user_profile: {
+    username: string;
+    display_name: string;
+  };
+}
