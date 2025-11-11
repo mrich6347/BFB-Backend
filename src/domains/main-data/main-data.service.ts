@@ -14,6 +14,7 @@ import { SharedGoalsCollaborationService } from '../shared-goals/shared-goals-co
 import { PayeesService } from '../payees/payees.service';
 import { ScheduledTransactionsService } from '../scheduled-transactions/scheduled-transactions.service';
 import { UserDateContextUtils, WithUserDateContext } from '../../common/interfaces/user-date-context.interface';
+import { SupabaseService } from '../../supabase/supabase.service';
 
 @Injectable()
 export class MainDataService {
@@ -30,7 +31,8 @@ export class MainDataService {
         private readonly sharedGoalsService: SharedGoalsService,
         private readonly sharedGoalsCollaborationService: SharedGoalsCollaborationService,
         private readonly payeesService: PayeesService,
-        private readonly scheduledTransactionsService: ScheduledTransactionsService
+        private readonly scheduledTransactionsService: ScheduledTransactionsService,
+        private readonly supabaseService: SupabaseService
     ) {}
 
     async getMainData(budgetId: string, authToken: string, userId: string, userDateContext?: WithUserDateContext): Promise<MainDataResponse> {
@@ -133,5 +135,25 @@ export class MainDataService {
         if (newBalances.length > 0) {
             await this.categoryBalancesService.createMultiple(newBalances, authToken);
         }
+    }
+
+    /**
+     * Get the most recent update timestamp across all budget-related tables
+     * This is used to detect if data has changed while the app was in the background
+     */
+    async getLastUpdateTimestamp(budgetId: string, authToken: string, userId: string): Promise<{ lastUpdate: string }> {
+        const supabase = this.supabaseService.getAuthenticatedClient(authToken);
+
+        // Query the most recent updated_at timestamp across all relevant tables
+        const { data, error } = await supabase.rpc('get_budget_last_update', {
+            p_budget_id: budgetId,
+            p_user_id: userId
+        });
+
+        if (error) {
+            throw new Error(`Failed to get last update timestamp: ${error.message}`);
+        }
+
+        return { lastUpdate: data || new Date().toISOString() };
     }
 }

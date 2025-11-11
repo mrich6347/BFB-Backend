@@ -10,6 +10,15 @@ import { WithUserDateContext } from '../../common/interfaces/user-date-context.i
 export class MainDataController {
   constructor(private readonly mainDataService: MainDataService, private readonly authService: AuthService) {}
 
+  @Get(':budgetId/last-update')
+  async getLastUpdateTimestamp(
+    @Req() req: any,
+    @Param('budgetId') budgetId: string
+  ): Promise<{ lastUpdate: string }> {
+    const authToken = this.authService.getAuthToken(req);
+    return this.mainDataService.getLastUpdateTimestamp(budgetId, authToken, req.user.id);
+  }
+
   @Get(':budgetId')
   async getMainData(
     @Req() req: any,
