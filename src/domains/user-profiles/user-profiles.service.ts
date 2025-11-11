@@ -36,7 +36,7 @@ export class UserProfilesService {
     const { data, error } = await supabase
       .from('user_profiles')
       .insert([payload])
-      .select('id, user_id, username, display_name, created_at, updated_at')
+      .select('id, user_id, username, display_name, birthdate, created_at, updated_at')
       .single();
 
     if (error) {
@@ -52,7 +52,7 @@ export class UserProfilesService {
 
     const { data, error } = await supabase
       .from('user_profiles')
-      .select('id, user_id, username, display_name, created_at, updated_at')
+      .select('id, user_id, username, display_name, birthdate, created_at, updated_at')
       .eq('user_id', userId)
       .maybeSingle();
 
@@ -93,7 +93,7 @@ export class UserProfilesService {
       .from('user_profiles')
       .update(updateUserProfileDto)
       .eq('user_id', userId)
-      .select('id, user_id, username, display_name, created_at, updated_at')
+      .select('id, user_id, username, display_name, birthdate, created_at, updated_at')
       .single();
 
     if (error) {

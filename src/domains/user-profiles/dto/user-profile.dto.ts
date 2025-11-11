@@ -1,12 +1,12 @@
-import { IsNotEmpty, IsOptional, IsString, IsUUID, Matches, MinLength, MaxLength } from 'class-validator';
+import { IsNotEmpty, IsOptional, IsString, IsUUID, Matches, MinLength, MaxLength, IsDateString } from 'class-validator';
 
 export class CreateUserProfileDto {
   @IsString()
   @IsNotEmpty()
   @MinLength(3, { message: 'Username must be at least 3 characters long' })
   @MaxLength(30, { message: 'Username must be at most 30 characters long' })
-  @Matches(/^[a-zA-Z0-9_-]+$/, { 
-    message: 'Username can only contain letters, numbers, underscores, and hyphens' 
+  @Matches(/^[a-zA-Z0-9_-]+$/, {
+    message: 'Username can only contain letters, numbers, underscores, and hyphens'
   })
   username: string;
 
@@ -14,6 +14,10 @@ export class CreateUserProfileDto {
   @IsNotEmpty()
   @MaxLength(100, { message: 'Display name must be at most 100 characters long' })
   display_name: string;
+
+  @IsDateString()
+  @IsOptional()
+  birthdate?: string;
 }
 
 export class UpdateUserProfileDto {
@@ -21,8 +25,8 @@ export class UpdateUserProfileDto {
   @IsOptional()
   @MinLength(3, { message: 'Username must be at least 3 characters long' })
   @MaxLength(30, { message: 'Username must be at most 30 characters long' })
-  @Matches(/^[a-zA-Z0-9_-]+$/, { 
-    message: 'Username can only contain letters, numbers, underscores, and hyphens' 
+  @Matches(/^[a-zA-Z0-9_-]+$/, {
+    message: 'Username can only contain letters, numbers, underscores, and hyphens'
   })
   username?: string;
 
@@ -30,6 +34,10 @@ export class UpdateUserProfileDto {
   @IsOptional()
   @MaxLength(100, { message: 'Display name must be at most 100 characters long' })
   display_name?: string;
+
+  @IsDateString()
+  @IsOptional()
+  birthdate?: string;
 }
 
 export class SearchUserProfileDto {
@@ -45,6 +53,7 @@ export class UserProfileResponse {
   user_id: string;
   username: string;
   display_name: string;
+  birthdate?: string;
   created_at: Date;
   updated_at: Date;
 }
