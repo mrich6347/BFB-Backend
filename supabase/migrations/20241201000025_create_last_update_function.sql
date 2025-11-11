@@ -17,7 +17,9 @@ BEGIN
         COALESCE((SELECT MAX(updated_at) FROM category_balances WHERE budget_id = p_budget_id AND user_id = p_user_id), '1970-01-01'::TIMESTAMPTZ),
         COALESCE((SELECT MAX(updated_at) FROM scheduled_transactions WHERE budget_id = p_budget_id AND user_id = p_user_id), '1970-01-01'::TIMESTAMPTZ),
         COALESCE((SELECT MAX(updated_at) FROM payees WHERE budget_id = p_budget_id AND user_id = p_user_id), '1970-01-01'::TIMESTAMPTZ),
-        COALESCE((SELECT MAX(updated_at) FROM shared_goals WHERE budget_id = p_budget_id), '1970-01-01'::TIMESTAMPTZ)
+        COALESCE((SELECT MAX(sg.updated_at) FROM shared_goals sg
+                  INNER JOIN goal_participants gp ON sg.id = gp.goal_id
+                  WHERE gp.budget_id = p_budget_id), '1970-01-01'::TIMESTAMPTZ)
     ) INTO last_update;
 
     RETURN last_update;
