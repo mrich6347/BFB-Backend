@@ -1,12 +1,13 @@
-import { Controller, Get, Post, Delete, Body, Param, Req, UseGuards, ParseUUIDPipe } from '@nestjs/common';
+import { Controller, Get, Post, Delete, Patch, Body, Param, Req, UseGuards, ParseUUIDPipe } from '@nestjs/common';
 import { NetWorthHistoryService } from './net-worth-history.service';
 import { AuthService } from '../../configurations/auth/auth.service';
 import { SupabaseAuthGuard } from '../../guards/auth.guard';
-import { 
-    NetWorthHistoryResponse, 
-    CreateNetWorthSnapshotDto, 
+import {
+    NetWorthHistoryResponse,
+    CreateNetWorthSnapshotDto,
     UploadYNABNetWorthDto,
-    NetWorthChartResponse
+    NetWorthChartResponse,
+    UpdateNetWorthNoteDto
 } from './dto/net-worth-history.dto';
 import { AccountsService } from '../accounts/accounts.service';
 
@@ -58,6 +59,15 @@ export class NetWorthHistoryController {
         const authToken = this.authService.getAuthToken(req);
         await this.netWorthHistoryService.deleteHistory(budgetId, req.user.id, authToken);
         return { message: 'Net worth history deleted successfully' };
+    }
+
+    @Patch('note')
+    async updateNote(
+        @Body() dto: UpdateNetWorthNoteDto,
+        @Req() req: any
+    ): Promise<NetWorthHistoryResponse> {
+        const authToken = this.authService.getAuthToken(req);
+        return this.netWorthHistoryService.updateNote(dto, req.user.id, authToken);
     }
 }
 

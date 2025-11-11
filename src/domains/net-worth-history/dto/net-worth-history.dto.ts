@@ -9,6 +9,7 @@ export class NetWorthHistoryResponse {
     total_assets: number;
     total_liabilities: number;
     net_worth: number;
+    note?: string;
     created_at: string;
     updated_at: string;
 }
@@ -37,6 +38,20 @@ export class NetWorthChartDataPoint {
     total_assets: number;
     total_liabilities: number;
     net_worth: number;
+    note?: string;
+}
+
+export class UpdateNetWorthNoteDto {
+    @IsUUID()
+    @IsNotEmpty()
+    budget_id: string;
+
+    @IsDateString()
+    @IsNotEmpty()
+    month_date: string;
+
+    @IsOptional()
+    note?: string;
 }
 
 export class NetWorthChartResponse {

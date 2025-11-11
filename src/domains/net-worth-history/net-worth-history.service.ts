@@ -1,11 +1,12 @@
 import { Injectable, BadRequestException } from '@nestjs/common';
 import { SupabaseService } from '../../supabase/supabase.service';
-import { 
-    NetWorthHistoryResponse, 
-    CreateNetWorthSnapshotDto, 
+import {
+    NetWorthHistoryResponse,
+    CreateNetWorthSnapshotDto,
     UploadYNABNetWorthDto,
     NetWorthChartResponse,
-    NetWorthChartDataPoint
+    NetWorthChartDataPoint,
+    UpdateNetWorthNoteDto
 } from './dto/net-worth-history.dto';
 import { AccountResponse } from '../accounts/DTO/account.dto';
 
@@ -34,7 +35,8 @@ export class NetWorthHistoryService {
             month_date: record.month_date,
             total_assets: parseFloat(record.total_assets),
             total_liabilities: parseFloat(record.total_liabilities),
-            net_worth: parseFloat(record.net_worth)
+            net_worth: parseFloat(record.net_worth),
+            note: record.note
         }));
 
         return {
@@ -138,6 +140,32 @@ export class NetWorthHistoryService {
         if (error) {
             throw new Error(error.message);
         }
+    }
+
+    /**
+     * Update note for a specific net worth history record
+     */
+    async updateNote(
+        dto: UpdateNetWorthNoteDto,
+        userId: string,
+        authToken: string
+    ): Promise<NetWorthHistoryResponse> {
+        const supabase = this.supabaseService.getAuthenticatedClient(authToken);
+
+        const { data, error } = await supabase
+            .from('net_worth_history')
+            .update({ note: dto.note })
+            .eq('user_id', userId)
+            .eq('budget_id', dto.budget_id)
+            .eq('month_date', dto.month_date)
+            .select()
+            .single();
+
+        if (error) {
+            throw new Error(error.message);
+        }
+
+        return data;
     }
 
     /**
