@@ -30,6 +30,11 @@ export enum NumberFormat {
   COMMA_DOT_LEADING = 'COMMA_DOT_LEADING' // 1,23,456.78
 }
 
+export enum Theme {
+  LIGHT = 'LIGHT',
+  DARK = 'DARK'
+}
+
 export class CreateBudgetDto {
   @IsString()
   @IsNotEmpty()
@@ -51,6 +56,10 @@ export class CreateBudgetDto {
   @IsEnum(DateFormat)
   @IsNotEmpty()
   date_format: DateFormat;
+
+  @IsEnum(Theme)
+  @IsOptional()
+  theme?: Theme;
 }
 
 export class UpdateBudgetDto {
@@ -77,6 +86,10 @@ export class UpdateBudgetDto {
   @IsOptional()
   number_format: NumberFormat;
 
+  @IsEnum(Theme)
+  @IsOptional()
+  theme?: Theme;
+
 }
 
 export class BudgetResponse {
@@ -86,5 +99,6 @@ export class BudgetResponse {
   currency_placement: CurrencyPlacement;
   date_format: DateFormat;
   number_format: NumberFormat;
+  theme: Theme;
   updated_at: Date;
 }

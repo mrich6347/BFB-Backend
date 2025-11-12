@@ -169,7 +169,7 @@ export class YnabImportOrchestratorService {
     const { data: budget, error: budgetError } = await supabase
       .from('budgets')
       .insert([{ ...budgetDto, user_id: userId }])
-      .select('currency, currency_placement, date_format, id, name, number_format, updated_at')
+      .select('currency, currency_placement, date_format, id, name, number_format, theme, updated_at')
       .single();
 
     if (budgetError) {

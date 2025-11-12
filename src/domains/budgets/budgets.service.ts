@@ -13,14 +13,14 @@ export class BudgetsService {
 
   async findOne(id: string, userId: string, authToken: string): Promise<BudgetResponse> {
     const supabase = this.supabaseService.getAuthenticatedClient(authToken);
- 
+
     const { data, error } = await supabase
        .from('budgets')
-       .select('id, currency, currency_placement, date_format, id, name, number_format, updated_at')
+       .select('id, currency, currency_placement, date_format, id, name, number_format, theme, updated_at')
        .eq('id', id)
        .eq('user_id', userId)
-       .single();  
- 
+       .single();
+
      if (error) {
        console.log("ERROR finding budget:", error, "Budget ID:", id, "User ID:", userId);
        throw new Error(error.message);
@@ -30,10 +30,10 @@ export class BudgetsService {
 
   async findAll(userId: string, authToken: string): Promise<BudgetResponse[]> {
     const supabase = this.supabaseService.getAuthenticatedClient(authToken);
-    
+
     const { data, error } = await supabase
       .from('budgets')
-      .select('currency, currency_placement, date_format, id, name, number_format, updated_at')
+      .select('currency, currency_placement, date_format, id, name, number_format, theme, updated_at')
       .eq('user_id', userId)
       .order('created_at', { ascending: false });
 
@@ -48,7 +48,7 @@ export class BudgetsService {
 
   async create(createBudgetDto: CreateBudgetDto, userId: string, authToken: string): Promise<BudgetResponse> {
     const supabase = this.supabaseService.getAuthenticatedClient(authToken);
-    
+
     let payload = {
       ...createBudgetDto,
       user_id: userId,
@@ -59,7 +59,7 @@ export class BudgetsService {
     const { data, error } = await supabase
       .from('budgets')
       .insert([payload])
-      .select('currency, currency_placement, date_format, id, name, number_format, updated_at')
+      .select('currency, currency_placement, date_format, id, name, number_format, theme, updated_at')
       .single();
 
     if (error) {
@@ -82,7 +82,7 @@ export class BudgetsService {
       .update(updateBudgetDto)
       .eq('id', id)
       .eq('user_id', userId)
-      .select('id, currency, currency_placement, date_format, id, name, number_format, updated_at')
+      .select('id, currency, currency_placement, date_format, id, name, number_format, theme, updated_at')
       .single();
 
     if (error) {
