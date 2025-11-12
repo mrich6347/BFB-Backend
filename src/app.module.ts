@@ -17,6 +17,7 @@ import { SharedGoalsModule } from './domains/shared-goals/shared-goals.module';
 import { PayeesModule } from './domains/payees/payees.module';
 import { NetWorthHistoryModule } from './domains/net-worth-history/net-worth-history.module';
 import { ScheduledTransactionsModule } from './domains/scheduled-transactions/scheduled-transactions.module';
+import { ReportsModule } from './domains/reports/reports.module';
 
 @Module({
   imports: [
@@ -35,7 +36,8 @@ import { ScheduledTransactionsModule } from './domains/scheduled-transactions/sc
     SharedGoalsModule,
     PayeesModule,
     NetWorthHistoryModule,
-    ScheduledTransactionsModule
+    ScheduledTransactionsModule,
+    ReportsModule
   ],
   controllers: [AppController],
   providers: [AppService],
