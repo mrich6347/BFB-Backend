@@ -52,7 +52,7 @@ export class AutoAssignService {
 
     const { data, error } = await supabase
       .from('auto_assign_configurations')
-      .select('name, budget_id, user_id, amount, created_at, updated_at')
+      .select('name, budget_id, user_id, category_id, amount, created_at, updated_at')
       .eq('budget_id', budgetId)
       .eq('user_id', userId)
       .order('name')
@@ -62,10 +62,40 @@ export class AutoAssignService {
       throw new Error(error.message);
     }
 
+    // Get the Hidden Categories group
+    const { data: hiddenGroup } = await supabase
+      .from('category_groups')
+      .select('id')
+      .eq('name', 'Hidden Categories')
+      .eq('is_system_group', true)
+      .eq('user_id', userId)
+      .single();
+
+    // Filter out hidden categories
+    let filteredData = data;
+    if (hiddenGroup && data.length > 0) {
+      const categoryIds = [...new Set(data.map(item => item.category_id))];
+      const { data: categories } = await supabase
+        .from('categories')
+        .select('id, category_group_id')
+        .in('id', categoryIds)
+        .eq('user_id', userId);
+
+      if (categories) {
+        const hiddenCategoryIds = new Set(
+          categories
+            .filter(cat => cat.category_group_id === hiddenGroup.id)
+            .map(cat => cat.id)
+        );
+
+        filteredData = data.filter(item => !hiddenCategoryIds.has(item.category_id));
+      }
+    }
+
     // Group by configuration name and calculate summaries
     const configMap = new Map<string, AutoAssignConfigurationSummary>();
-    
-    for (const item of data) {
+
+    for (const item of filteredData) {
       const key = item.name;
       if (!configMap.has(key)) {
         configMap.set(key, {
@@ -78,11 +108,11 @@ export class AutoAssignService {
           updated_at: item.updated_at
         });
       }
-      
+
       const config = configMap.get(key)!;
       config.item_count++;
       config.total_amount += parseFloat(item.amount.toString());
-      
+
       // Keep the most recent updated_at
       if (new Date(item.updated_at) > new Date(config.updated_at)) {
         config.updated_at = item.updated_at;
@@ -111,7 +141,42 @@ export class AutoAssignService {
       return null;
     }
 
-    return this.formatConfigurationResponse(data);
+    // Get the Hidden Categories group
+    const { data: hiddenGroup } = await supabase
+      .from('category_groups')
+      .select('id')
+      .eq('name', 'Hidden Categories')
+      .eq('is_system_group', true)
+      .eq('user_id', userId)
+      .single();
+
+    // Filter out hidden categories
+    let filteredData = data;
+    if (hiddenGroup) {
+      const categoryIds = [...new Set(data.map(item => item.category_id))];
+      const { data: categories } = await supabase
+        .from('categories')
+        .select('id, category_group_id')
+        .in('id', categoryIds)
+        .eq('user_id', userId);
+
+      if (categories) {
+        const hiddenCategoryIds = new Set(
+          categories
+            .filter(cat => cat.category_group_id === hiddenGroup.id)
+            .map(cat => cat.id)
+        );
+
+        filteredData = data.filter(item => !hiddenCategoryIds.has(item.category_id));
+      }
+    }
+
+    // If all categories were hidden, return null
+    if (filteredData.length === 0) {
+      return null;
+    }
+
+    return this.formatConfigurationResponse(filteredData);
   }
 
   async update(name: string, budgetId: string, updateDto: UpdateAutoAssignConfigurationDto, userId: string, authToken: string): Promise<AutoAssignConfigurationResponse> {
@@ -215,12 +280,57 @@ export class AutoAssignService {
       throw new Error('Configuration not found');
     }
 
+    // Get the Hidden Categories group
+    const { data: hiddenGroup } = await supabase
+      .from('category_groups')
+      .select('id')
+      .eq('name', 'Hidden Categories')
+      .eq('is_system_group', true)
+      .eq('user_id', userId)
+      .single();
+
+    // Filter out hidden categories
+    let filteredConfigItems = configItems;
+    if (hiddenGroup) {
+      // Get all categories with their group IDs
+      const categoryIds = configItems.map(item => item.category_id);
+      const { data: categories } = await supabase
+        .from('categories')
+        .select('id, category_group_id')
+        .in('id', categoryIds)
+        .eq('user_id', userId);
+
+      if (categories) {
+        // Filter out items whose categories are in the Hidden Categories group
+        const hiddenCategoryIds = new Set(
+          categories
+            .filter(cat => cat.category_group_id === hiddenGroup.id)
+            .map(cat => cat.id)
+        );
+
+        filteredConfigItems = configItems.filter(
+          item => !hiddenCategoryIds.has(item.category_id)
+        );
+      }
+    }
+
+    // If no visible categories remain, return early
+    if (filteredConfigItems.length === 0) {
+      const readyToAssign = await this.readyToAssignService.calculateReadyToAssign(applyDto.budget_id, userId, authToken);
+      return {
+        success: false,
+        appliedCount: 0,
+        readyToAssign,
+        appliedCategories: []
+      };
+    }
+
     // Get current month for balance updates (use user context if provided)
     const { year, month } = UserDateContextUtils.getCurrentUserDate(userDateContext);
 
     // Use batch update for better performance
     const result = await this.categoryWriteService.batchUpdateAssigned(
-      configItems.map(item => ({
+      filteredConfigItems.map(item => ({
         category_id: item.category_id,
         amount: item.amount
       })),
