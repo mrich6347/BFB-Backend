@@ -53,5 +53,23 @@ export class ReportsController {
     const authToken = this.authService.getAuthToken(req);
     return this.reportsService.getCategoryBreakdown(query, req.user.id, authToken);
   }
+
+  @Get('top-spending-category-groups')
+  async getTopSpendingCategoryGroups(
+    @Query() query: ReportsQueryDto,
+    @Req() req: any
+  ): Promise<any> {
+    const authToken = this.authService.getAuthToken(req);
+    return this.reportsService.getTopSpendingCategoryGroups(query, req.user.id, authToken);
+  }
+
+  @Get('category-group-breakdown')
+  async getCategoryGroupBreakdown(
+    @Query() query: ReportsQueryDto,
+    @Req() req: any
+  ): Promise<any> {
+    const authToken = this.authService.getAuthToken(req);
+    return this.reportsService.getCategoryGroupBreakdown(query, req.user.id, authToken);
+  }
 }
 

@@ -5,7 +5,6 @@ import type {
   SpendingOverTimeResponse,
   TopPayeesResponse,
   CategoryBreakdownResponse,
-  IncomeVsExpensesResponse,
   ReportsQueryDto
 } from './dto/reports.dto';
 
@@ -118,6 +117,124 @@ export class ReportsService {
       period_start: start_date,
       period_end: end_date,
       categories
+    };
+  }
+
+  /**
+   * Get top spending by category groups
+   */
+  async getTopSpendingCategoryGroups(
+    query: ReportsQueryDto,
+    userId: string,
+    authToken: string
+  ): Promise<any> {
+    const supabase = this.supabaseService.getAuthenticatedClient(authToken);
+    const { start_date, end_date } = this.getDateRange(query);
+    const limit = query.limit || 10;
+
+    // Get all accounts for this budget
+    const { data: accounts, error: accountsError } = await supabase
+      .from('accounts')
+      .select('id')
+      .eq('budget_id', query.budget_id)
+      .eq('user_id', userId);
+
+    if (accountsError) {
+      throw new Error(accountsError.message);
+    }
+
+    const accountIds = accounts?.map(a => a.id) || [];
+
+    if (accountIds.length === 0) {
+      return {
+        period_start: start_date,
+        period_end: end_date,
+        category_groups: []
+      };
+    }
+
+    // Query transactions with category group information
+    const { data: transactions, error } = await supabase
+      .from('transactions')
+      .select(`
+        amount,
+        category_id,
+        categories (
+          id,
+          name,
+          category_group_id,
+          category_groups (
+            id,
+            name
+          )
+        )
+      `)
+      .eq('user_id', userId)
+      .in('account_id', accountIds)
+      .gte('date', start_date)
+      .lte('date', end_date)
+      .lt('amount', 0)
+      .not('category_id', 'is', null);
+
+    if (error) {
+      throw new Error(error.message);
+    }
+
+    // Filter out credit card payment categories
+    const filteredTransactions = transactions?.filter(t => {
+      const categoryName = (t.categories as any)?.name || '';
+      return !categoryName.endsWith(' Payment');
+    }) || [];
+
+    // Aggregate by category group
+    const groupMap = new Map<string, {
+      category_group_id: string;
+      category_group_name: string;
+      total_spent: number;
+      transaction_count: number;
+      categories: Set<string>;
+    }>();
+
+    filteredTransactions.forEach((txn: any) => {
+      if (!txn.categories?.category_groups) return;
+
+      const groupId = txn.categories.category_group_id;
+      const groupName = txn.categories.category_groups.name;
+      const categoryId = txn.category_id;
+      const amount = Math.abs(txn.amount);
+
+      if (groupMap.has(groupId)) {
+        const existing = groupMap.get(groupId)!;
+        existing.total_spent += amount;
+        existing.transaction_count += 1;
+        existing.categories.add(categoryId);
+      } else {
+        groupMap.set(groupId, {
+          category_group_id: groupId,
+          category_group_name: groupName,
+          total_spent: amount,
+          transaction_count: 1,
+          categories: new Set([categoryId])
+        });
+      }
+    });
+
+    // Convert to array and sort
+    const category_groups = Array.from(groupMap.values())
+      .map(g => ({
+        category_group_id: g.category_group_id,
+        category_group_name: g.category_group_name,
+        total_spent: g.total_spent,
+        transaction_count: g.transaction_count,
+        category_count: g.categories.size
+      }))
+      .sort((a, b) => b.total_spent - a.total_spent)
+      .slice(0, limit);
+
+    return {
+      period_start: start_date,
+      period_end: end_date,
+      category_groups
     };
   }
 
@@ -292,6 +409,40 @@ export class ReportsService {
   }
 
   /**
+   * Get category group breakdown (for pie chart)
+   */
+  async getCategoryGroupBreakdown(
+    query: ReportsQueryDto,
+    userId: string,
+    authToken: string
+  ): Promise<any> {
+    const groupData = await this.getTopSpendingCategoryGroups(
+      { ...query, limit: 100 },
+      userId,
+      authToken
+    );
+
+    const total_expenses = groupData.category_groups.reduce(
+      (sum: number, grp: any) => sum + grp.total_spent,
+      0
+    );
+
+    const breakdown = groupData.category_groups.map((grp: any) => ({
+      category_group_id: grp.category_group_id,
+      category_group_name: grp.category_group_name,
+      amount: grp.total_spent,
+      percentage: total_expenses > 0 ? (grp.total_spent / total_expenses) * 100 : 0
+    }));
+
+    return {
+      period_start: groupData.period_start,
+      period_end: groupData.period_end,
+      total_expenses,
+      breakdown
+    };
+  }
+
+  /**
    * Get category breakdown (for pie chart)
    */
   async getCategoryBreakdown(
@@ -338,7 +489,7 @@ export class ReportsService {
     } | undefined = undefined;
 
     if (accountIds.length > 0) {
-      const { data: transactions, error: txnError } = await supabase
+      const { data: transactions } = await supabase
         .from('transactions')
         .select(`
           amount,
@@ -356,19 +507,6 @@ export class ReportsService {
         .not('category_id', 'is', null)
         .order('amount', { ascending: true })
         .limit(10);
-
-      console.log('🔍 Largest transaction query:', {
-        accountIds,
-        start_date,
-        end_date,
-        transactionCount: transactions?.length,
-        error: txnError,
-        transactions: transactions?.map(t => ({
-          amount: t.amount,
-          payee: t.payee,
-          category: (t.categories as any)?.name
-        }))
-      });
 
       if (transactions && transactions.length > 0) {
         // Filter out payment categories and find the largest

@@ -12,6 +12,20 @@ export interface CategorySpendingResponse {
   categories: CategorySpendingItem[];
 }
 
+export interface CategoryGroupSpendingItem {
+  category_group_id: string;
+  category_group_name: string;
+  total_spent: number;
+  transaction_count: number;
+  category_count: number;
+}
+
+export interface CategoryGroupSpendingResponse {
+  period_start: string;
+  period_end: string;
+  category_groups: CategoryGroupSpendingItem[];
+}
+
 export interface MonthlySpendingItem {
   year: number;
   month: number;
