@@ -32,7 +32,8 @@ export enum NumberFormat {
 
 export enum Theme {
   LIGHT = 'LIGHT',
-  DARK = 'DARK'
+  DARK = 'DARK',
+  AMBER = 'AMBER'
 }
 
 export class CreateBudgetDto {
