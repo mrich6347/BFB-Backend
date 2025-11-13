@@ -50,11 +50,10 @@ export class ReorderCategoriesDto {
   category_ids: string[];
 }
 
+// UnhideCategoryDto is now empty but kept for backward compatibility
+// Categories will be unhidden to their original group (no targetGroupId needed)
 export class UnhideCategoryDto {
-  @IsString()
-  @IsUUID()
-  @IsOptional()
-  targetGroupId?: string;
+  // No fields needed - category will be set to active=true and remain in its original group
 }
 
 export class MoveMoneyDto {
@@ -110,6 +109,7 @@ export class CategoryResponse {
   activity: number;
   available: number;
   display_order: number;
+  active: boolean;
   created_at: Date;
   updated_at: Date;
 }

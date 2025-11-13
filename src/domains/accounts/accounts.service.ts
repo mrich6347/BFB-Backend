@@ -619,13 +619,14 @@ export class AccountsService {
     }
 
     try {
-      // Use the categories service to unhide the payment category and move it to Credit Card Payments
-      const result = await this.categoryWriteService.unhide(paymentCategory.id, userId, authToken, creditCardPaymentsGroup.id);
-      console.log(`Moved payment category '${paymentCategoryName}' from Hidden Categories to Credit Card Payments`);
+      // Use the categories service to unhide the payment category
+      // It will remain in the Credit Card Payments group (its original group)
+      const result = await this.categoryWriteService.unhide(paymentCategory.id, userId, authToken);
+      console.log(`Unhid payment category '${paymentCategoryName}' in Credit Card Payments group`);
       return { category: result.category };
     } catch (error) {
-      console.error(`Failed to move payment category '${paymentCategoryName}' from Hidden Categories:`, error);
-      // Don't throw - account reopen should still succeed even if category move fails
+      console.error(`Failed to unhide payment category '${paymentCategoryName}':`, error);
+      // Don't throw - account reopen should still succeed even if category unhide fails
       return null;
     }
   }

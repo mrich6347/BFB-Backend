@@ -97,22 +97,8 @@ export class CategoryGroupsService {
       throw new Error('System category groups cannot be deleted');
     }
 
-    // Get the Hidden Categories group for this budget
-    const { data: hiddenGroup, error: hiddenGroupError } = await supabase
-      .from('category_groups')
-      .select('id')
-      .eq('budget_id', groupData.budget_id)
-      .eq('user_id', userId)
-      .eq('name', 'Hidden Categories')
-      .eq('is_system_group', true)
-      .single();
-
-    if (hiddenGroupError) {
-      throw new Error('Hidden Categories group not found');
-    }
-
-    // Get all categories in this group before moving them
-    const { data: categoriesToMove, error: categoriesError } = await supabase
+    // Get all categories in this group before hiding them
+    const { data: categoriesToHide, error: categoriesError } = await supabase
       .from('categories')
       .select('*')
       .eq('category_group_id', id)
@@ -122,10 +108,11 @@ export class CategoryGroupsService {
       throw new Error(categoriesError.message);
     }
 
-    // Move all categories in this group to Hidden Categories before deleting the group
+    // Set all categories in this group as inactive (hidden) before deleting the group
+    // They keep their original category_group_id for reporting purposes
     const { error: updateError } = await supabase
       .from('categories')
-      .update({ category_group_id: hiddenGroup.id })
+      .update({ active: false })
       .eq('category_group_id', id)
       .eq('user_id', userId);
 
@@ -144,10 +131,10 @@ export class CategoryGroupsService {
       throw new Error(error.message);
     }
 
-    // Return the moved categories with updated group_id
-    const movedCategories = (categoriesToMove || []).map(category => ({
+    // Return the hidden categories with active=false
+    const movedCategories = (categoriesToHide || []).map(category => ({
       ...category,
-      category_group_id: hiddenGroup.id,
+      active: false,
       assigned: 0,
       activity: 0,
       available: 0
@@ -175,22 +162,8 @@ export class CategoryGroupsService {
       throw new Error('System category groups cannot be hidden');
     }
 
-    // Get the Hidden Categories group for this budget
-    const { data: hiddenGroup, error: hiddenGroupError } = await supabase
-      .from('category_groups')
-      .select('id')
-      .eq('budget_id', groupData.budget_id)
-      .eq('user_id', userId)
-      .eq('name', 'Hidden Categories')
-      .eq('is_system_group', true)
-      .single();
-
-    if (hiddenGroupError) {
-      throw new Error('Hidden Categories group not found');
-    }
-
-    // Get all categories in this group before moving them
-    const { data: categoriesToMove, error: categoriesError } = await supabase
+    // Get all categories in this group before hiding them
+    const { data: categoriesToHide, error: categoriesError } = await supabase
       .from('categories')
       .select('*')
       .eq('category_group_id', id)
@@ -200,10 +173,11 @@ export class CategoryGroupsService {
       throw new Error(categoriesError.message);
     }
 
-    // Move all categories in this group to Hidden Categories
+    // Set all categories in this group as inactive (hidden)
+    // They keep their original category_group_id for reporting purposes
     const { error: updateError } = await supabase
       .from('categories')
-      .update({ category_group_id: hiddenGroup.id })
+      .update({ active: false })
       .eq('category_group_id', id)
       .eq('user_id', userId);
 
@@ -222,10 +196,10 @@ export class CategoryGroupsService {
       throw new Error(deleteError.message);
     }
 
-    // Return the moved categories with updated group_id
-    const movedCategories = (categoriesToMove || []).map(category => ({
+    // Return the hidden categories with active=false
+    const movedCategories = (categoriesToHide || []).map(category => ({
       ...category,
-      category_group_id: hiddenGroup.id,
+      active: false,
       assigned: 0,
       activity: 0,
       available: 0

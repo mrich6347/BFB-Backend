@@ -327,20 +327,6 @@ export class CategoryWriteService {
       throw new Error(fetchError.message);
     }
 
-    // Get the Hidden Categories group for this budget
-    const { data: hiddenGroup, error: hiddenGroupError } = await supabase
-      .from('category_groups')
-      .select('id')
-      .eq('budget_id', categoryData.budget_id)
-      .eq('user_id', userId)
-      .eq('name', 'Hidden Categories')
-      .eq('is_system_group', true)
-      .single();
-
-    if (hiddenGroupError) {
-      throw new Error('Hidden Categories group not found');
-    }
-
     // Get the current balance for this category to see if there's money to return to Ready to Assign
     const { data: currentBalance, error: balanceError } = await supabase
       .from('category_balances')
@@ -370,10 +356,10 @@ export class CategoryWriteService {
       }
     }
 
-    // Move category to Hidden Categories group
+    // Set category as inactive (hidden) - keeps original category_group_id for reporting
     const { error: updateError } = await supabase
       .from('categories')
-      .update({ category_group_id: hiddenGroup.id })
+      .update({ active: false })
       .eq('id', id)
       .eq('user_id', userId);
 
@@ -411,13 +397,13 @@ export class CategoryWriteService {
     return { readyToAssign, category };
   }
 
-  async unhide(id: string, userId: string, authToken: string, targetGroupId?: string): Promise<{ readyToAssign: number; category: CategoryResponse }> {
+  async unhide(id: string, userId: string, authToken: string): Promise<{ readyToAssign: number; category: CategoryResponse }> {
     const supabase = this.supabaseService.getAuthenticatedClient(authToken);
 
     // Get category data
     const { data: categoryData, error: fetchError } = await supabase
       .from('categories')
-      .select('budget_id, category_group_id')
+      .select('budget_id, active')
       .eq('id', id)
       .eq('user_id', userId)
       .single();
@@ -426,41 +412,15 @@ export class CategoryWriteService {
       throw new Error(fetchError.message);
     }
 
-    // Verify category is currently in Hidden Categories group
-    const { data: currentGroup, error: groupError } = await supabase
-      .from('category_groups')
-      .select('name, is_system_group')
-      .eq('id', categoryData.category_group_id)
-      .eq('user_id', userId)
-      .single();
-
-    if (groupError || currentGroup.name !== 'Hidden Categories') {
+    // Verify category is currently inactive (hidden)
+    if (categoryData.active) {
       throw new Error('Category is not currently hidden');
     }
 
-    // If no target group specified, move to first non-system group
-    let targetGroup = targetGroupId;
-    if (!targetGroup) {
-      const { data: firstGroup, error: firstGroupError } = await supabase
-        .from('category_groups')
-        .select('id')
-        .eq('budget_id', categoryData.budget_id)
-        .eq('user_id', userId)
-        .eq('is_system_group', false)
-        .order('display_order', { ascending: true })
-        .limit(1)
-        .single();
-
-      if (firstGroupError) {
-        throw new Error('No available category group to move to');
-      }
-      targetGroup = firstGroup.id;
-    }
-
-    // Move category to target group
+    // Set category as active (unhidden) - keeps original category_group_id
     const { error: updateError } = await supabase
       .from('categories')
-      .update({ category_group_id: targetGroup })
+      .update({ active: true })
       .eq('id', id)
       .eq('user_id', userId);
 
@@ -480,7 +440,7 @@ export class CategoryWriteService {
       throw new Error(updatedCategoryError.message);
     }
 
-    // Calculate updated Ready to Assign (should remain the same since we're just moving)
+    // Calculate updated Ready to Assign (should remain the same since we're just unhiding)
     const readyToAssign = await this.readyToAssignService.calculateReadyToAssign(
       categoryData.budget_id,
       userId,

@@ -70,11 +70,10 @@ export class CategoriesController {
   @Patch(':id/unhide')
   async unhide(
     @Param('id', new ParseUUIDPipe()) id: string,
-    @Body() unhideCategoryDto: UnhideCategoryDto,
     @Req() req: any
   ): Promise<{ readyToAssign: number; category: CategoryResponse }> {
     const authToken = this.authService.getAuthToken(req);
-    return this.categoryWriteService.unhide(id, req.user.id, authToken, unhideCategoryDto.targetGroupId);
+    return this.categoryWriteService.unhide(id, req.user.id, authToken);
   }
 
   @Post('reorder')
