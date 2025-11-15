@@ -14,16 +14,16 @@ export class ReadyToAssignService {
   async calculateReadyToAssign(budgetId: string, userId: string, authToken: string): Promise<number> {
     const supabase = this.supabaseService.getAuthenticatedClient(authToken);
 
-    // Calculate Total Available Money from accounts
-    const totalAvailableMoney = await this.calculateTotalAvailableMoney(supabase, budgetId, userId);
+    // Calculate Total Cash from accounts
+    const totalCash = await this.calculateTotalAvailableMoney(supabase, budgetId, userId);
 
-    // Calculate Total Available money sitting in category balances across all months
-    // Negative availability represents overspending that still needs to be covered
-    const totalCategoryAvailability = await this.calculateTotalCategoryAvailability(supabase, budgetId, userId);
+    // Calculate category balances
+    const { positiveAvailable, negativeAssigned } = await this.calculateTotalAssigned(supabase, budgetId, userId);
 
-    const readyToAssign = totalAvailableMoney - totalCategoryAvailability;
+    // Ready to Assign = Cash - Positive Available + Negative Assigned (which frees up money)
+    const readyToAssign = totalCash - positiveAvailable + Math.abs(negativeAssigned);
 
-    console.log('📊 RTA: Cash=$' + totalAvailableMoney.toFixed(2) + ' - Categories=$' + totalCategoryAvailability.toFixed(2) + ' = $' + readyToAssign.toFixed(2));
+    console.log('📊 RTA: Cash=$' + totalCash.toFixed(2) + ' - Positive Available=$' + positiveAvailable.toFixed(2) + ' + Negative Assigned=$' + Math.abs(negativeAssigned).toFixed(2) + ' = $' + readyToAssign.toFixed(2));
 
     return readyToAssign;
   }
@@ -59,7 +59,7 @@ export class ReadyToAssignService {
     return totalFromAccounts;
   }
 
-  private async calculateTotalCategoryAvailability(supabase: SupabaseClient, budgetId: string, userId: string): Promise<number> {
+  private async calculateTotalAssigned(supabase: SupabaseClient, budgetId: string, userId: string): Promise<{ positiveAvailable: number; negativeAssigned: number }> {
     const now = new Date();
     const currentYear = now.getUTCFullYear();
     const currentMonth = now.getUTCMonth() + 1;
@@ -116,39 +116,41 @@ export class ReadyToAssignService {
 
     const categoryMap = new Map(categories?.map(c => [c.id, c.name]) || []);
 
-    // Sum all available amounts - YNAB only counts positive availability
-    // Negative availability (overspending) is already reflected in reduced account balances
-    // So we don't double-count it by also reducing Ready to Assign
-    let totalPositiveAvailability = 0;
-    let totalNegativeAvailability = 0;
+    // YNAB Rule:
+    // - Sum positive available (money sitting in categories)
+    // - Sum negative assigned (money pulled back from categories)
+    let positiveAvailable = 0;
+    let negativeAssigned = 0;
     const positiveCategories: string[] = [];
     const negativeCategories: string[] = [];
 
     for (const balance of categoryBalances) {
       const available = balance.available || 0;
+      const assigned = balance.assigned || 0;
       const categoryName = categoryMap.get(balance.category_id) || 'Unknown';
 
+      // Sum positive available
       if (available > 0) {
-        totalPositiveAvailability += available;
-        positiveCategories.push(`${categoryName}=$${available.toFixed(2)}`);
-      } else if (available < 0) {
-        totalNegativeAvailability += available;
-        negativeCategories.push(`${categoryName}=$${available.toFixed(2)}`);
+        positiveAvailable += available;
+        positiveCategories.push(`${categoryName} available=$${available.toFixed(2)}`);
+      }
+
+      // Sum negative assigned
+      if (assigned < 0) {
+        negativeAssigned += assigned; // This will be negative
+        negativeCategories.push(`${categoryName} assigned=$${assigned.toFixed(2)}`);
       }
     }
 
-    const totalCategoryAvailability = totalPositiveAvailability + totalNegativeAvailability;
-
     console.log(`   📝 Categories (${targetYear}/${targetMonth}):`);
     if (positiveCategories.length > 0) {
-      console.log(`      ✅ Positive [${positiveCategories.join(', ')}] = $${totalPositiveAvailability.toFixed(2)}`);
+      console.log(`      ✅ Positive Available [${positiveCategories.join(', ')}] = $${positiveAvailable.toFixed(2)}`);
     }
     if (negativeCategories.length > 0) {
-      console.log(`      ❌ Negative [${negativeCategories.join(', ')}] = $${totalNegativeAvailability.toFixed(2)}`);
+      console.log(`      ⬅️  Negative Assigned [${negativeCategories.join(', ')}] = $${negativeAssigned.toFixed(2)}`);
     }
-    console.log(`      📊 Total = $${totalPositiveAvailability.toFixed(2)} + $${totalNegativeAvailability.toFixed(2)} = $${totalCategoryAvailability.toFixed(2)}`);
 
-    return totalCategoryAvailability;
+    return { positiveAvailable, negativeAssigned };
   }
 
 
