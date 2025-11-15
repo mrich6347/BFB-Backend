@@ -15,6 +15,7 @@ import { PayeesService } from '../payees/payees.service';
 import { ScheduledTransactionsService } from '../scheduled-transactions/scheduled-transactions.service';
 import { UserDateContextUtils, WithUserDateContext } from '../../common/interfaces/user-date-context.interface';
 import { SupabaseService } from '../../supabase/supabase.service';
+import { RetirementSettingsService } from '../retirement-settings/retirement-settings.service';
 
 @Injectable()
 export class MainDataService {
@@ -32,14 +33,15 @@ export class MainDataService {
         private readonly sharedGoalsCollaborationService: SharedGoalsCollaborationService,
         private readonly payeesService: PayeesService,
         private readonly scheduledTransactionsService: ScheduledTransactionsService,
-        private readonly supabaseService: SupabaseService
+        private readonly supabaseService: SupabaseService,
+        private readonly retirementSettingsService: RetirementSettingsService
     ) {}
 
     async getMainData(budgetId: string, authToken: string, userId: string, userDateContext?: WithUserDateContext): Promise<MainDataResponse> {
         // First, check if we need to roll over to current month
         await this.checkAndHandleMonthRollover(budgetId, userId, authToken, userDateContext);
 
-        const [budget, accounts, categoryGroups, categories, categoryBalances, transactions, readyToAssign, autoAssignConfigurations, userProfile, sharedGoals, invitations, payees, scheduledTransactions] = await Promise.all([
+        const [budget, accounts, categoryGroups, categories, categoryBalances, transactions, readyToAssign, autoAssignConfigurations, userProfile, sharedGoals, invitations, payees, scheduledTransactions, retirementSettings] = await Promise.all([
             this.budgetsService.findOne(budgetId, userId, authToken),
             this.accountsService.findAll(userId, authToken, budgetId),
             this.categoryGroupsService.findAll(budgetId, userId, authToken),
@@ -52,7 +54,8 @@ export class MainDataService {
             this.sharedGoalsService.findByUserId(userId, budgetId, authToken),
             this.sharedGoalsCollaborationService.getInvitations(userId, authToken),
             this.payeesService.findByBudget(budgetId, userId, authToken),
-            this.scheduledTransactionsService.findAllByBudget(budgetId, userId, authToken)
+            this.scheduledTransactionsService.findAllByBudget(budgetId, userId, authToken),
+            this.retirementSettingsService.getRetirementSettings(budgetId, userId, authToken)
         ]);
 
 
@@ -69,7 +72,8 @@ export class MainDataService {
            sharedGoals,
            invitations,
            payees,
-           scheduledTransactions
+           scheduledTransactions,
+           retirementSettings: retirementSettings || undefined
         }
     }
 

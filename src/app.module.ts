@@ -18,6 +18,7 @@ import { PayeesModule } from './domains/payees/payees.module';
 import { NetWorthHistoryModule } from './domains/net-worth-history/net-worth-history.module';
 import { ScheduledTransactionsModule } from './domains/scheduled-transactions/scheduled-transactions.module';
 import { ReportsModule } from './domains/reports/reports.module';
+import { RetirementSettingsModule } from './domains/retirement-settings/retirement-settings.module';
 
 @Module({
   imports: [
@@ -37,7 +38,8 @@ import { ReportsModule } from './domains/reports/reports.module';
     PayeesModule,
     NetWorthHistoryModule,
     ScheduledTransactionsModule,
-    ReportsModule
+    ReportsModule,
+    RetirementSettingsModule
   ],
   controllers: [AppController],
   providers: [AppService],

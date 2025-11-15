@@ -14,6 +14,7 @@ import { UserProfilesModule } from '../user-profiles/user-profiles.module';
 import { SharedGoalsModule } from '../shared-goals/shared-goals.module';
 import { PayeesModule } from '../payees/payees.module';
 import { ScheduledTransactionsModule } from '../scheduled-transactions/scheduled-transactions.module';
+import { RetirementSettingsModule } from '../retirement-settings/retirement-settings.module';
 
 @Module({
   controllers: [MainDataController],
@@ -31,7 +32,8 @@ import { ScheduledTransactionsModule } from '../scheduled-transactions/scheduled
     UserProfilesModule,
     SharedGoalsModule,
     PayeesModule,
-    ScheduledTransactionsModule
+    ScheduledTransactionsModule,
+    RetirementSettingsModule
   ],
 })
 export class MainDataModule {}
